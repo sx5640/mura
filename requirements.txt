@@ -5,3 +5,5 @@ keras
 scipy
 imageio
 matplotlib
+opencv-python
+python-mnist

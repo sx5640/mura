@@ -2,12 +2,15 @@
 Import data from dataset, and preprocess it.
 """
 import imghdr
+import math
 import os
 import re
 
+import cv2
+import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import imageio
 
 
 IMG_SIZE = 512
@@ -149,6 +152,40 @@ def preprocess():
     return df_train, df_valid
 
 
+def pick_bpart(df, bpart):
+    """
+    Create a sub dataset of particular body part.
+    :param df: dataframe to process
+    :param bpart: body part to extract
+    :return: trimmed dataframe
+    """
+    return df[df["body_part"] == bpart].reset_index()
+
+
+def pick_n_per_patient(df, num):
+    """
+    Create a sub dataset that pick first n images from each patient. Will return error
+    if num is greater than the minial count
+    :param df: dataframe to process
+    :param num: number of images to pick from each patient. if set to 0, then pick all.
+    :return: trimmed dataframe
+    """
+    if num == 0:
+        return df
+    min_count = df.groupby("study")["path"].count().min()
+
+    if num > min_count:
+        raise ValueError("num is greater than minimum count of images per patient: {}".format(
+            min_count
+        ))
+
+    result = pd.DataFrame()
+    for study in df["study"].unique():
+        result = result.append(df[df["study"] == study][:num])
+
+    return result.reset_index()
+
+
 def load_images(df):
     """
     Load all images in the dataframe in to a nparray. Will add padding to make
@@ -158,7 +195,7 @@ def load_images(df):
     image path
     """
     num_images = df.shape[0]
-    imgs = np.zeros((num_images, IMG_SIZE, IMG_SIZE))
+    imgs = np.zeros((num_images, IMG_SIZE, IMG_SIZE, 1))
     labels = np.zeros(num_images)
     path = [""] * num_images
     for idx, row in df.iterrows():
@@ -179,40 +216,39 @@ def load_images(df):
         vert_start = int((IMG_SIZE - img.shape[1]) / 2)
         vert_cord = range(vert_start, vert_start + img.shape[1])
 
-        imgs[np.ix_([idx], horz_cord, vert_cord)] = img
+        imgs[np.ix_([idx], horz_cord, vert_cord, [0])] = img.reshape(
+            (img.shape[0], img.shape[1], 1)
+        )
         labels[idx] = row["label"]
         path[idx] = row["path"]
 
     return imgs, labels, path
 
 
-def pick_bpart(df, bpart):
+def show_first_n_img(imgs, num=9):
     """
-    Create a sub dataset of particular body part.
-    :param df: dataframe to process
-    :param bpart: body part to extract
-    :return: trimmed dataframe
+    Show first n images from the given list.
+    :param imgs: ndarry of images
+    :param num: number of images to show
+    :return:
     """
-    return df[df["body_part"] == bpart].reset_index()
+    n_row = int(math.sqrt(num))
+    n_col = math.ceil(math.sqrt(num))
+    plt.figure(1)
+    plt.tight_layout()
+    for i in range(num):
+        plt.subplot(n_row, n_col, i + 1)
+        plt.imshow(imgs[i, :, :, 0], cmap='gray')
 
 
-def pick_n_per_patient(df, num):
+def resize_img(imgs, size):
     """
-    Create a sub dataset that pick first n images from each patient. Will return error
-    if num is greater than the minial count
-    :param df: dataframe to process
-    :param num: number of images to pick from each patient
-    :return: trimmed dataframe
+    Resize a list of images.
+    :param imgs: imgs to resize.
+    :param size: size of the image to resize to
+    :return: resized images
     """
-    min_count = df.groupby("study")["path"].count().min()
-
-    if num > min_count:
-        raise ValueError("num is greater than minimum count of images per patient: {}".format(
-            min_count
-        ))
-
-    result = pd.DataFrame()
-    for study in df["study"].unique():
-        result = result.append(df[df["study"] == study][:num])
-
-    return result.reset_index()
+    vfunc = np.vectorize(
+        lambda img: cv2.resize(img, (size, size)).reshape((size, size, 1)),
+    )
+    return vfunc(imgs)
