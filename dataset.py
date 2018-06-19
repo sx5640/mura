@@ -1,5 +1,14 @@
 """
 Import data from dataset, and preprocess it.
+
+To use take advantage of the preprocess in this file, simply import this file to
+your python code and call `train_table, valid_table = dataset.preprocess()` to get
+all images in one table with their labels and metadata.
+
+Once you have the training and validation table, you pass them into the utility
+methods to select the dataset you need, and use `dataset.load_images(result_table)`
+to output the actual images and labels as ndarray. You can also use
+`dataset.resize_img(imgs, img_size)` to resize your images to desired image size.
 """
 import imghdr
 import math
@@ -17,40 +26,47 @@ IMG_SIZE = 512
 
 DATA_VIR = "1.1"
 
-DATA_DIR = os.path.abspath(__file__)        # ?/dataset.py
-DATA_DIR = os.path.dirname(DATA_DIR)        # ?/
+DATA_DIR = os.path.abspath(__file__)                            # ?/dataset.py
+ROOT_DIR = os.path.dirname(DATA_DIR)                            # ?/
 DATA_DIR = os.path.join(
-    DATA_DIR,
+    ROOT_DIR,
     "dataset",
     "MURA-v" + DATA_VIR,
-)                                           # ?/dataset/MURA-v1.1/
+)                                                               # ?/dataset/MURA-v1.1/
 
 TRAIN_DIR = os.path.join(DATA_DIR, "train")
 VALID_DIR = os.path.join(DATA_DIR, "valid")
 
-# import labeled dataset into Dataframe
-TRAIN_LABELED = pd.read_csv(
-    os.path.join(DATA_DIR, "train_labeled_studies.csv"),
-    names=["patient", "label"]
-)
-
-VALID_LABELED = pd.read_csv(
-    os.path.join(DATA_DIR, "valid_labeled_studies.csv"),
-    names=["patient", "label"]
-)
-
-# import image paths
-TRAIN_PATH = pd.read_csv(
-    os.path.join(DATA_DIR, "train_image_paths.csv"),
-    names=["path"]
-)
-
-VALID_PATH = pd.read_csv(
-    os.path.join(DATA_DIR, "valid_image_paths.csv"),
-    names=["path"]
-)
-
 BPARTS = ["elbow", "finger", "forearm", "hand", "humerus", "shoulder", "wrist"]
+
+
+def load_dataframe():
+    """
+     Import csv files into Dataframes.
+    :return:
+    """
+    train_labeled = pd.read_csv(
+        os.path.join(DATA_DIR, "train_labeled_studies.csv"),
+        names=["patient", "label"]
+    )
+
+    valid_labeled = pd.read_csv(
+        os.path.join(DATA_DIR, "valid_labeled_studies.csv"),
+        names=["patient", "label"]
+    )
+
+    # import image paths
+    train_path = pd.read_csv(
+        os.path.join(DATA_DIR, "train_image_paths.csv"),
+        names=["path"]
+    )
+
+    valid_path = pd.read_csv(
+        os.path.join(DATA_DIR, "valid_image_paths.csv"),
+        names=["path"]
+    )
+
+    return train_labeled, valid_labeled, train_path, valid_path
 
 
 def classify_bpart(data):
@@ -146,11 +162,16 @@ def preprocess():
     Preprocess datasets.
     :return: training set, validation set
     """
-    df_train = build_dataframe(TRAIN_LABELED, TRAIN_PATH)
-    df_valid = build_dataframe(VALID_LABELED, VALID_PATH)
+    train_labeled, valid_labeled, train_path, valid_path = load_dataframe()
+    df_train = build_dataframe(train_labeled, train_path)
+    df_valid = build_dataframe(valid_labeled, valid_path)
 
     return df_train, df_valid
 
+
+#################################
+#       Utility Fnctions        #
+#################################
 
 def pick_bpart(df, bpart):
     """
@@ -248,7 +269,7 @@ def resize_img(imgs, size):
     :param size: size of the image to resize to
     :return: resized images
     """
-    vfunc = np.vectorize(
-        lambda img: cv2.resize(img, (size, size)).reshape((size, size, 1)),
-    )
-    return vfunc(imgs)
+    result = []
+    for img in imgs:
+        result.append(cv2.resize(img, (size, size)).reshape((size, size, 1)))
+    return np.asarray(result)

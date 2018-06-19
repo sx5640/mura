@@ -1,3 +1,7 @@
 # Replicate MURA baseline and playing around
 
-Reference https://stanfordmlgroup.github.io/competitions/mura/
+Mura competition https://stanfordmlgroup.github.io/competitions/mura/
+
+## Note
+The `master` branch shall only contains utilities that are shared by all models.
+For each model, please checkout new branch.
