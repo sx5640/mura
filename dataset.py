@@ -180,6 +180,8 @@ def pick_bpart(df, bpart):
     :param bpart: body part to extract
     :return: trimmed dataframe
     """
+    if bpart == "all":
+        return df
     return df[df["body_part"] == bpart].reset_index()
 
 
