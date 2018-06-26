@@ -66,7 +66,7 @@ def build_model(img_size, l1, l2):
     tensor = conv_block(tensor, 256, 3, 3, "relu", l1, l2)
     tensor = conv_block(tensor, 512, 3, 3, "relu", l1, l2)
     tensor = conv_block(tensor, 512, 3, 3, "relu", l1, l2)
-    tensor = keras.layers.Flatten()(tensor)
+    tensor = keras.layers.Flatten(name="flatten")(tensor)
     tensor = keras.layers.Dense(256, activation="relu")(tensor)
     tensor = keras.layers.Dropout(0.5)(tensor)
     tensor = keras.layers.Dense(1, activation="sigmoid", name="predictions")(tensor)

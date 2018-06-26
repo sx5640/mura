@@ -4,6 +4,7 @@ General purposed utility methods shared by all models.
 To use, simply import the file and start making calls.
 """
 import os
+import tempfile
 
 import numpy as np
 import keras
@@ -65,6 +66,22 @@ def create_dir(path):
         # create the directory you want to save to
         create_dir(os.path.dirname(path))
         os.mkdir(path)
+
+
+def reload_model(model):
+    """
+    Reload a given model by saving it to a temporary file and reload.
+    :param model: Model to reload.
+    :return: reloaded model.
+    """
+    model_path = os.path.join(tempfile.gettempdir(), "temp.h5")
+    try:
+        model.save(model_path)
+        model = keras.models.load_model(model_path)
+    finally:
+        os.remove(model_path)
+
+    return model
 
 
 #################################

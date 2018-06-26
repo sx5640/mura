@@ -1,9 +1,10 @@
 numpy
 pandas
 tensorflow
-keras
+keras==2.1.6
 scipy
 imageio
 matplotlib
 opencv-python
 python-mnist
+keras-vis

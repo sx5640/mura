@@ -209,6 +209,43 @@ def pick_n_per_patient(df, num):
     return result.reset_index()
 
 
+def grayscale(img):
+    """
+    Grayscale image if it is not already gray scaled.
+    :param img: Image to process in nparray.
+    :return: Processed image.
+    """
+    if len(img.shape) == 3 and img.shape[2] == 3:
+        img = np.tensordot(img, [0.2, 0.5, 0.3], axes=(-1, -1))
+    return img.reshape(
+            (img.shape[0], img.shape[1], 1)
+        )
+
+
+def zero_pad(img):
+    """
+    Add black padding to the image.
+
+    for each side of the image, each colour channel shall be padded with 0s of size
+    (512 - image_width/height)/2 on each end, so that the image stays in the center,
+    and is surrounded with black.
+
+    :param img: Image to process in nparray.
+    :return: Processed image.
+    """
+    result = np.zeros((IMG_SIZE, IMG_SIZE, 1))
+    horz_start = int((IMG_SIZE - img.shape[0]) / 2)
+    horz_cord = range(horz_start, horz_start + img.shape[0])
+
+    vert_start = int((IMG_SIZE - img.shape[1]) / 2)
+    vert_cord = range(vert_start, vert_start + img.shape[1])
+
+    result[np.ix_(horz_cord, vert_cord, [0])] = img.reshape(
+            (img.shape[0], img.shape[1], 1)
+        )
+    return result
+
+
 def load_images(df):
     """
     Load all images in the dataframe in to a nparray. Will add padding to make
@@ -225,32 +262,18 @@ def load_images(df):
         # load image from path into nparray
         img = imageio.imread(row["path"])
 
-        # gray scale image if it is not already gray scaled
-        if len(img.shape) == 3:
-            img = np.tensordot(img, [0.2, 0.5, 0.3], axes=(-1, -1))
+        img = grayscale(img)
 
-        # add padding to the image matrix
-        # for each side of the image, each colour channel shall be padded with 0s of size
-        # (512 - image_width/height)/2 on each end, so that the image stays in the center,
-        # and is surrounded with black.
-        horz_start = int((IMG_SIZE - img.shape[0]) / 2)
-        horz_cord = range(horz_start, horz_start + img.shape[0])
-
-        vert_start = int((IMG_SIZE - img.shape[1]) / 2)
-        vert_cord = range(vert_start, vert_start + img.shape[1])
-
-        imgs[np.ix_([idx], horz_cord, vert_cord, [0])] = img.reshape(
-            (img.shape[0], img.shape[1], 1)
-        )
+        imgs[idx] = zero_pad(img)
         labels[idx] = row["label"]
         path[idx] = row["path"]
 
     return imgs, labels, path
 
 
-def show_first_n_img(imgs, num=9):
+def plot_first_n_img(imgs, num=9):
     """
-    Show first n images from the given list.
+    Plot first n images from the given list.
     :param imgs: ndarry of images
     :param num: number of images to show
     :return:
