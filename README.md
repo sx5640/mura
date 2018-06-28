@@ -11,6 +11,7 @@ Mura competition https://stanfordmlgroup.github.io/competitions/mura/
 zip file and unpack them.
 5. To run VGGNet model on MURA dataset, run `python vggnet.py train`. Add `-h` flag for all options.
 6. To run a simple model on MNIST dataset, run `python mnist_simple.py train`. Add `-h` flag for all options.
+7. To show a visualization of model attention or activation of a layer, run `python visualize.py`. Add `-h` flag for all options.
 
 #### Note: 
 - In order to run tensorflow in gpu, install `tensorflow-gpu` instead of `tensorflow` in `requirements.txt`

@@ -2,6 +2,7 @@
 Visualization of a given model
 """
 import argparse
+import math
 
 import dataset
 
@@ -106,7 +107,7 @@ def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
     :param img_path: Path to a validation image. Optional
     :param bpart: Body part to pick if img_path not given
     :param img_size: Size of the image to reshape to
-    :param kwargs:
+    :param kwargs: Unused arguments
     :return:
     """
     model = import_model(model_path)
@@ -128,6 +129,44 @@ def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
     plt.show()
 
 
+def plt_activation(model_path, layer_idx, max_iter, **kwargs):
+    """
+    Plot activation of a given layer in a model by generating an image that
+    maximizes the output of all `filter_indices` in the given `layer_idx`.
+    Args:
+        model_path: Path to the model file.
+        layer_idx: Index of the layer to plot.
+        max_iter: Maximum number of iterations to generate the input image.
+        kwargs: Unused arguments.
+
+    Returns:
+
+    """
+    model = import_model(model_path)
+    if type(model.layers[layer_idx]) == keras.layers.Dense:
+        img = vvis.visualize_activation(
+            model, layer_idx, max_iter=max_iter, filter_indices=None
+        )
+    else:
+        filters = np.arange(vvis.get_num_filters(model.layers[layer_idx]))
+
+        # Generate input image for each filter.
+        vis_images = []
+        for idx in filters:
+            act_img = vvis.visualize_activation(
+                model, layer_idx, max_iter=max_iter, filter_indices=idx
+            )
+
+            vis_images.append(act_img)
+
+        # Generate stitched image palette with 8 cols.
+        img = vutils.stitch_images(vis_images, cols=math.floor(math.sqrt(len(vis_images)*2)))
+
+    plt.axis('off')
+    plt.imshow(img.reshape(img.shape[0:2]), cmap="gray")
+    plt.show()
+
+
 if __name__ == "__main__":
     # Define argument parser so that the script can be executed directly
     # from console.
@@ -140,24 +179,36 @@ if __name__ == "__main__":
         "-m", "--model_path", type=str, required=True, help="path to model file."
     )
 
-    PARENT_PARSER.add_argument(
+    # Arguments for plotting attention
+    ATTENTION_PARSER = SUBPARSER.add_parser("attention", parents=[PARENT_PARSER])
+    ATTENTION_PARSER.set_defaults(func=plt_attention)
+
+    ATTENTION_PARSER.add_argument(
         "-i", "--img_path", type=str, default=None,
         help="path to image file. If set, use given image instead "
              "of a random on from validation set"
     )
 
-    PARENT_PARSER.add_argument(
+    ATTENTION_PARSER.add_argument(
         "-is", "--img_size", type=int, default=512, help="image size to reshape to"
     )
 
-    PARENT_PARSER.add_argument(
+    ATTENTION_PARSER.add_argument(
         "-bp", "--bpart", type=str, default="all",
         help="body part to use for training and prediction"
     )
 
-    # Arguments for plotting saliency
-    SALIENCY_PARSER = SUBPARSER.add_parser("attention", parents=[PARENT_PARSER])
-    SALIENCY_PARSER.set_defaults(func=plt_attention)
+    # Arguments for plotting activation
+    ATTENTION_PARSER = SUBPARSER.add_parser("activation", parents=[PARENT_PARSER])
+    ATTENTION_PARSER.set_defaults(func=plt_activation)
+
+    ATTENTION_PARSER.add_argument(
+        "-l", "--layer_idx", type=int, default=-1, help="Index of the layer to plot"
+    )
+
+    ATTENTION_PARSER.add_argument(
+        "-mi", "--max_iter", type=int, default=200, help="Index of the layer to plot"
+    )
 
     # parse argument
     ARGS = ARG_PARSER.parse_args()
