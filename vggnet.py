@@ -179,6 +179,16 @@ def train(resize, load_param, bpart, num_pick, batch_size, epochs, learning_rate
                 protocol=4
             )
 
+    imggen = keras.preprocessing.image.ImageDataGenerator(
+        featurewise_center=True,
+        featurewise_std_normalization=True,
+        rotation_range=30,
+        fill_mode="constant",
+        cval=0,
+        horizontal_flip=True)
+
+    imggen.fit(img_train)
+
     # log training time
     start_time = datetime.datetime.now()
     print("****** Starting Training: {:%H-%M-%S}".format(start_time))
@@ -189,9 +199,9 @@ def train(resize, load_param, bpart, num_pick, batch_size, epochs, learning_rate
     ))
     util.create_dir(log_path)
     tfboard = keras.callbacks.TensorBoard(log_dir=log_path, write_grads=True)
-
-    history = model.fit(
-        img_train, label_train, batch_size=batch_size, epochs=epochs, verbose=2,
+    history = model.fit_generator(
+        imggen.flow(img_train, label_train, batch_size=batch_size),
+        epochs=epochs, verbose=2,
         validation_data=(img_valid, label_valid),
         callbacks=[tfboard]
     )

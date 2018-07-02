@@ -40,12 +40,15 @@ def get_seed_image(bpart, img_size, img_path):
         _, valid_labeled, _, valid_path = dataset.load_dataframe()
         df_valid = dataset.build_dataframe(valid_labeled, valid_path)
         df_valid = df_valid[df_valid["body_part"] == bpart]
-        img_path = df_valid["path"].sample(1).iloc[0]
+        rdm_row = df_valid.sample(1).iloc[0]
+        img_path = rdm_row["path"]
+        label = rdm_row["label"]
 
     img = imageio.imread(img_path)
     img = dataset.grayscale(img)
     img = dataset.zero_pad(img)
-    return cv2.resize(img, (img_size, img_size)).reshape((img_size, img_size, 1))
+    img = cv2.resize(img, (img_size, img_size)).reshape((img_size, img_size, 1))
+    return img, img_path, label
 
 
 def plt_saliency(model, img, ax, idx):
@@ -111,7 +114,9 @@ def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
     :return:
     """
     model = import_model(model_path)
-    img = get_seed_image(bpart, img_size, img_path)
+    img, path, label = get_seed_image(bpart, img_size, img_path)
+
+    prediction = model.predict(np.asarray([img]))
 
     f, ax = plt.subplots(1, 3)
 
@@ -126,6 +131,8 @@ def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
     plt_cam(model, img, ax, 2)
 
     plt.tight_layout()
+    plt.suptitle("Prediction: {}, Label: {}".format(prediction, label))
+    plt.figtext(.5, 0, "Image: {}".format(path))
     plt.show()
 
 
