@@ -227,7 +227,7 @@ class BinaryKappa(keras.layers.Layer):
         false_neg += self.false_negative * 1
         sm = true_pos + true_neg + false_pos + false_neg
         obs_agree = (true_pos + true_neg) / sm
-        poss_pos = (true_pos + false_neg) * (true_pos + false_pos) / sm**2
-        poss_neg = (true_neg + false_neg) * (true_neg + false_pos) / sm**2
+        poss_pos = (true_pos + false_neg) * (true_pos + false_pos) / (sm**2)
+        poss_neg = (true_neg + false_neg) * (true_neg + false_pos) / (sm**2)
         poss_agree = poss_pos + poss_neg
-        return (obs_agree - poss_agree) / (1 - obs_agree)
+        return (obs_agree - poss_agree) / (1 - poss_agree)

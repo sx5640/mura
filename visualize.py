@@ -5,6 +5,7 @@ import argparse
 import math
 
 import dataset
+import util
 
 import cv2
 import imageio
@@ -27,6 +28,26 @@ def import_model(model_path):
     )
 
 
+def prediction_layer_linear_activation(model):
+    """
+    Utility method for changing prediction layer's activation to use linear.
+    This method will reload the model.
+    Args:
+        model: model to apply change to.
+
+    Returns: reloaded model.
+
+    """
+    # Utility to search for layer index by name.
+    # Alternatively we can specify this as -1 since it corresponds to the last layer.
+    layer_idx = vutils.find_layer_idx(model, 'predictions')
+
+    # Swap softmax with linear
+    model.layers[layer_idx].activation = keras.activations.linear
+
+    return util.reload_model(model)
+
+
 def get_seed_image(bpart, img_size, img_path):
     """
     Utility method for getting a seeding image to visualize attention.
@@ -36,16 +57,20 @@ def get_seed_image(bpart, img_size, img_path):
     :param img_path: path to image file.
     :return: Keras model
     """
+    _, valid_labeled, _, valid_path = dataset.load_dataframe()
     if not img_path:
-        _, valid_labeled, _, valid_path = dataset.load_dataframe()
         df_valid = dataset.build_dataframe(valid_labeled, valid_path)
         df_valid = df_valid[df_valid["body_part"] == bpart]
-        img_path = df_valid["path"].sample(1).iloc[0]
-
+        rdm_row = df_valid.sample(1).iloc[0]
+        img_path = rdm_row["path"]
+        label = rdm_row["label"]
+    else:
+        label = valid_labeled[valid_labeled["path"] == img_path].iloc[0]["label"]
     img = imageio.imread(img_path)
     img = dataset.grayscale(img)
     img = dataset.zero_pad(img)
-    return cv2.resize(img, (img_size, img_size)).reshape((img_size, img_size, 1))
+    img = cv2.resize(img, (img_size, img_size)).reshape((img_size, img_size, 1))
+    return img, img_path, label
 
 
 def plt_saliency(model, img, ax, idx):
@@ -99,7 +124,7 @@ def plt_cam(model, img, ax, idx, layer_idx=None):
     ax[idx].set_title("Heatmap")
 
 
-def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
+def plt_attention(model_path, img_path=None, bpart="all", img_size=512, **kwargs):
     """
     Plot attention graph, including saliency and CAM.
 
@@ -111,7 +136,11 @@ def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
     :return:
     """
     model = import_model(model_path)
-    img = get_seed_image(bpart, img_size, img_path)
+    model = prediction_layer_linear_activation(model)
+
+    img, path, label = get_seed_image(bpart, img_size, img_path)
+
+    prediction = model.predict(np.asarray([img]))
 
     f, ax = plt.subplots(1, 3)
 
@@ -126,10 +155,12 @@ def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
     plt_cam(model, img, ax, 2)
 
     plt.tight_layout()
+    plt.suptitle("Prediction: {}, Label: {}".format(prediction, label))
+    plt.figtext(.5, 0, "Image: {}".format(path))
     plt.show()
 
 
-def plt_activation(model_path, layer_idx, max_iter, **kwargs):
+def plt_activation(model_path, layer_idx=-1, max_iter=None, **kwargs):
     """
     Plot activation of a given layer in a model by generating an image that
     maximizes the output of all `filter_indices` in the given `layer_idx`.
@@ -143,6 +174,7 @@ def plt_activation(model_path, layer_idx, max_iter, **kwargs):
 
     """
     model = import_model(model_path)
+    model = prediction_layer_linear_activation(model)
     if type(model.layers[layer_idx]) == keras.layers.Dense:
         img = vvis.visualize_activation(
             model, layer_idx, max_iter=max_iter, filter_indices=None
@@ -184,30 +216,30 @@ if __name__ == "__main__":
     ATTENTION_PARSER.set_defaults(func=plt_attention)
 
     ATTENTION_PARSER.add_argument(
-        "-i", "--img_path", type=str, default=None,
+        "-i", "--img_path", type=str,
         help="path to image file. If set, use given image instead "
              "of a random on from validation set"
     )
 
     ATTENTION_PARSER.add_argument(
-        "-is", "--img_size", type=int, default=512, help="image size to reshape to"
+        "-is", "--img_size", type=int, help="image size to reshape to"
     )
 
     ATTENTION_PARSER.add_argument(
-        "-bp", "--bpart", type=str, default="all",
+        "-bp", "--bpart", type=str,
         help="body part to use for training and prediction"
     )
 
     # Arguments for plotting activation
-    ATTENTION_PARSER = SUBPARSER.add_parser("activation", parents=[PARENT_PARSER])
-    ATTENTION_PARSER.set_defaults(func=plt_activation)
+    ACTIVATION_PARSER = SUBPARSER.add_parser("activation", parents=[PARENT_PARSER])
+    ACTIVATION_PARSER.set_defaults(func=plt_activation)
 
-    ATTENTION_PARSER.add_argument(
-        "-l", "--layer_idx", type=int, default=-1, help="Index of the layer to plot"
+    ACTIVATION_PARSER.add_argument(
+        "-l", "--layer_idx", type=int, help="Index of the layer to plot"
     )
 
-    ATTENTION_PARSER.add_argument(
-        "-mi", "--max_iter", type=int, default=200, help="Index of the layer to plot"
+    ACTIVATION_PARSER.add_argument(
+        "-mi", "--max_iter", type=int, help="Index of the layer to plot"
     )
 
     # parse argument
