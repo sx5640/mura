@@ -5,6 +5,7 @@ import argparse
 import math
 
 import dataset
+import util
 
 import cv2
 import imageio
@@ -25,6 +26,26 @@ def import_model(model_path):
         model_path,
         compile=False
     )
+
+
+def prediction_layer_linear_activation(model):
+    """
+    Utility method for changing prediction layer's activation to use linear.
+    This method will reload the model.
+    Args:
+        model: model to apply change to.
+
+    Returns: reloaded model.
+
+    """
+    # Utility to search for layer index by name.
+    # Alternatively we can specify this as -1 since it corresponds to the last layer.
+    layer_idx = vutils.find_layer_idx(model, 'predictions')
+
+    # Swap softmax with linear
+    model.layers[layer_idx].activation = keras.activations.linear
+
+    return util.reload_model(model)
 
 
 def get_seed_image(bpart, img_size, img_path):
@@ -114,6 +135,8 @@ def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
     :return:
     """
     model = import_model(model_path)
+    model = prediction_layer_linear_activation(model)
+
     img, path, label = get_seed_image(bpart, img_size, img_path)
 
     prediction = model.predict(np.asarray([img]))
@@ -150,6 +173,7 @@ def plt_activation(model_path, layer_idx, max_iter, **kwargs):
 
     """
     model = import_model(model_path)
+    model = prediction_layer_linear_activation(model)
     if type(model.layers[layer_idx]) == keras.layers.Dense:
         img = vvis.visualize_activation(
             model, layer_idx, max_iter=max_iter, filter_indices=None
@@ -206,14 +230,14 @@ if __name__ == "__main__":
     )
 
     # Arguments for plotting activation
-    ATTENTION_PARSER = SUBPARSER.add_parser("activation", parents=[PARENT_PARSER])
-    ATTENTION_PARSER.set_defaults(func=plt_activation)
+    ACTIVATION_PARSER = SUBPARSER.add_parser("activation", parents=[PARENT_PARSER])
+    ACTIVATION_PARSER.set_defaults(func=plt_activation)
 
-    ATTENTION_PARSER.add_argument(
+    ACTIVATION_PARSER.add_argument(
         "-l", "--layer_idx", type=int, default=-1, help="Index of the layer to plot"
     )
 
-    ATTENTION_PARSER.add_argument(
+    ACTIVATION_PARSER.add_argument(
         "-mi", "--max_iter", type=int, default=200, help="Index of the layer to plot"
     )
 
