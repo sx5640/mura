@@ -57,14 +57,15 @@ def get_seed_image(bpart, img_size, img_path):
     :param img_path: path to image file.
     :return: Keras model
     """
+    _, valid_labeled, _, valid_path = dataset.load_dataframe()
     if not img_path:
-        _, valid_labeled, _, valid_path = dataset.load_dataframe()
         df_valid = dataset.build_dataframe(valid_labeled, valid_path)
         df_valid = df_valid[df_valid["body_part"] == bpart]
         rdm_row = df_valid.sample(1).iloc[0]
         img_path = rdm_row["path"]
         label = rdm_row["label"]
-
+    else:
+        label = valid_labeled[valid_labeled["path"] == img_path].iloc[0]["label"]
     img = imageio.imread(img_path)
     img = dataset.grayscale(img)
     img = dataset.zero_pad(img)
@@ -123,7 +124,7 @@ def plt_cam(model, img, ax, idx, layer_idx=None):
     ax[idx].set_title("Heatmap")
 
 
-def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
+def plt_attention(model_path, img_path=None, bpart="all", img_size=512, **kwargs):
     """
     Plot attention graph, including saliency and CAM.
 
@@ -159,7 +160,7 @@ def plt_attention(model_path, img_path, bpart, img_size, **kwargs):
     plt.show()
 
 
-def plt_activation(model_path, layer_idx, max_iter, **kwargs):
+def plt_activation(model_path, layer_idx=-1, max_iter=None, **kwargs):
     """
     Plot activation of a given layer in a model by generating an image that
     maximizes the output of all `filter_indices` in the given `layer_idx`.
@@ -215,17 +216,17 @@ if __name__ == "__main__":
     ATTENTION_PARSER.set_defaults(func=plt_attention)
 
     ATTENTION_PARSER.add_argument(
-        "-i", "--img_path", type=str, default=None,
+        "-i", "--img_path", type=str,
         help="path to image file. If set, use given image instead "
              "of a random on from validation set"
     )
 
     ATTENTION_PARSER.add_argument(
-        "-is", "--img_size", type=int, default=512, help="image size to reshape to"
+        "-is", "--img_size", type=int, help="image size to reshape to"
     )
 
     ATTENTION_PARSER.add_argument(
-        "-bp", "--bpart", type=str, default="all",
+        "-bp", "--bpart", type=str,
         help="body part to use for training and prediction"
     )
 
@@ -234,11 +235,11 @@ if __name__ == "__main__":
     ACTIVATION_PARSER.set_defaults(func=plt_activation)
 
     ACTIVATION_PARSER.add_argument(
-        "-l", "--layer_idx", type=int, default=-1, help="Index of the layer to plot"
+        "-l", "--layer_idx", type=int, help="Index of the layer to plot"
     )
 
     ACTIVATION_PARSER.add_argument(
-        "-mi", "--max_iter", type=int, default=200, help="Index of the layer to plot"
+        "-mi", "--max_iter", type=int, help="Index of the layer to plot"
     )
 
     # parse argument

@@ -3,8 +3,8 @@ pandas
 tensorflow
 keras==2.1.6
 scipy
-imageio
 matplotlib
 opencv-python
 python-mnist
 keras-vis
+tqdm

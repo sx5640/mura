@@ -16,10 +16,12 @@ import os
 import re
 
 import cv2
-import imageio
+import keras
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+import util
 
 
 IMG_SIZE = 512
@@ -209,19 +211,6 @@ def pick_n_per_patient(df, num):
     return result.reset_index()
 
 
-def grayscale(img):
-    """
-    Grayscale image if it is not already gray scaled.
-    :param img: Image to process in nparray.
-    :return: Processed image.
-    """
-    if len(img.shape) == 3 and img.shape[2] == 3:
-        img = np.tensordot(img, [0.2, 0.5, 0.3], axes=(-1, -1))
-    return img.reshape(
-            (img.shape[0], img.shape[1], 1)
-        )
-
-
 def zero_pad(img):
     """
     Add black padding to the image.
@@ -233,42 +222,35 @@ def zero_pad(img):
     :param img: Image to process in nparray.
     :return: Processed image.
     """
-    result = np.zeros((IMG_SIZE, IMG_SIZE, 1))
+    result = np.zeros((IMG_SIZE, IMG_SIZE, img.shape[2]))
     horz_start = int((IMG_SIZE - img.shape[0]) / 2)
     horz_cord = range(horz_start, horz_start + img.shape[0])
 
     vert_start = int((IMG_SIZE - img.shape[1]) / 2)
     vert_cord = range(vert_start, vert_start + img.shape[1])
 
-    result[np.ix_(horz_cord, vert_cord, [0])] = img.reshape(
-            (img.shape[0], img.shape[1], 1)
+    result[np.ix_(horz_cord, vert_cord, range(img.shape[2]))] = img.reshape(
+            (img.shape[0], img.shape[1], img.shape[2])
         )
     return result
 
 
-def load_images(df):
+def load_image(img_path, is_grayscale=False):
     """
-    Load all images in the dataframe in to a nparray. Will add padding to make
-    a square image. Image will be grayscaled if it not already.
-    :param df: dataframe to load from.
-    :return: nparray of shape (num_images, img_size, img_size), corresponding labels,
-    image path
+    Load a single image into a ndarray.
+    Args:
+        img_path:
+            path to the image
+
+        is_grayscale:
+            if load the image to grayscale or RGB
+
+    Returns: image as ndarray
+
     """
-    num_images = df.shape[0]
-    imgs = np.zeros((num_images, IMG_SIZE, IMG_SIZE, 1))
-    labels = np.zeros(num_images)
-    path = [""] * num_images
-    for idx, row in df.iterrows():
-        # load image from path into nparray
-        img = imageio.imread(row["path"])
-
-        img = grayscale(img)
-
-        imgs[idx] = zero_pad(img)
-        labels[idx] = row["label"]
-        path[idx] = row["path"]
-
-    return imgs, labels, path
+    im = keras.preprocessing.image.load_img(img_path, grayscale=is_grayscale)
+    im = keras.preprocessing.image.img_to_array(im)     # converts image to numpy array
+    return zero_pad(im)
 
 
 def plot_first_n_img(imgs, num=9):
@@ -287,14 +269,37 @@ def plot_first_n_img(imgs, num=9):
         plt.imshow(imgs[i, :, :, 0], cmap='gray')
 
 
-def resize_img(imgs, size):
+def save_img(img, filename):
     """
-    Resize a list of images.
-    :param imgs: imgs to resize.
-    :param size: size of the image to resize to
-    :return: resized images
+    Utility method that convert a ndarray into image and save to a image file.
+    Args:
+        img: image in ndarray
+        filename: target filename including path
+
+    Returns:
+
     """
-    result = []
-    for img in imgs:
-        result.append(cv2.resize(img, (size, size)).reshape((size, size, 1)))
-    return np.asarray(result)
+    img = keras.preprocessing.image.array_to_img(img)
+    try:
+        img.save(filename)
+    except FileNotFoundError:
+        util.create_dir(os.path.dirname(filename))
+        img.save(filename)
+
+
+def resize_img(img, size):
+    """
+    Given a list of images in ndarray, resize them into target size.
+    Args:
+        img: Input image in ndarray
+        size: Target image size
+
+    Returns: Resized images in ndarray
+
+    """
+
+    img = cv2.resize(img, (size, size))
+    if len(img.shape) == 2:
+        img = img.reshape((size, size, 1))
+    return img
+
