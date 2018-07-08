@@ -13,6 +13,7 @@ import pandas as pd
 import tqdm
 
 import dataset
+import metric
 import util
 
 
@@ -165,7 +166,7 @@ def load_resources(bpart, num_pick, color_mode, img_size):
         )
     )
 
-    # Load datasets from scvs. If not exist, recreate from dataset.py and save to csvs
+    # Load datasets from csvs. If not exist, recreate from dataset.py and save to csvs
     try:
         train_df = pd.read_csv(train_table_path, index_col=0)
         valid_df = pd.read_csv(valid_table_path, index_col=0)
@@ -204,6 +205,45 @@ def load_resources(bpart, num_pick, color_mode, img_size):
     return train_df, valid_df, img_valid, label_valid, path_valid, flow_dir
 
 
+def training_image_generator(df, batch_size, img_size, grayscale):
+    """
+    Generator that return
+    Args:
+        df: Dataframe that contains all the images need to be loaded
+        batch_size: Maximum number of images in each batch
+        grayscale: Import image as grayscale or RGB
+        img_size: Image size to resize the image to if not equals IMG_SIZE
+
+    Returns:
+
+    """
+    datagen_args = dict(
+        featurewise_center=True,
+        featurewise_std_normalization=True,
+        rotation_range=30,
+        fill_mode="constant",
+        cval=0,
+        horizontal_flip=True
+    )
+    datagen = keras.preprocessing.image.ImageDataGenerator(**datagen_args)
+
+    while True:
+        # loop once per epoch
+        df = df.sample(frac=1).reset_index(drop=True)
+        for batch in np.array_split(df, batch_size):
+            imgs = []
+            labels = []
+            for index, row in batch.iterrows():
+                img = dataset.load_image(row["path"], grayscale)
+                if img_size != IMG_SIZE and img_size > 0:
+                    img = dataset.resize_img(img, img_size)
+                img = datagen.random_transform(img)
+                imgs.append(img)
+                labels.append(row["label"])
+
+            yield imgs, labels
+
+
 def train(resize=True, load_param=False, grayscale=False, bpart="all", num_pick=0,
           batch_size=32, epochs=50, learning_rate=0.0001, decay=0,
           l1=0.0, l2=0.0, **kwargs):
@@ -222,9 +262,14 @@ def train(resize=True, load_param=False, grayscale=False, bpart="all", num_pick=
     :param decay: decay per epoch, which learning rate is is calculated by
         lr *= (1. / (1. + decay * iterations))
     :param kwargs: extra parameters
-    :return: A History object. Its History.history attribute is a record of training
+    :return:
+        A History object. Its History.history attribute is a record of training
         loss values and metrics values at successive epochs, as well as validation loss
         values and validation metrics values (if applicable).
+
+        Path to where the model is been saved
+
+        Path to where the result csv is been saved
     """
     # prepare training params
     img_size = VGG_INPUT_SIZE if resize else IMG_SIZE
@@ -241,13 +286,13 @@ def train(resize=True, load_param=False, grayscale=False, bpart="all", num_pick=
         epsilon=None, decay=decay, amsgrad=False
     )
 
-    global_recall = util.BinaryRecall()
-    global_kappa = util.BinaryKappa()
+    global_recall = metric.BinaryRecall()
+    global_kappa = metric.BinaryKappa()
 
     model.compile(
         loss='binary_crossentropy',
         optimizer=adam,
-        metrics=[keras.metrics.binary_accuracy, util.batch_recall, global_recall, global_kappa]
+        metrics=[keras.metrics.binary_accuracy, metric.batch_recall, global_recall, global_kappa]
     )
 
     print("****** Preparing Input")
@@ -293,18 +338,20 @@ def train(resize=True, load_param=False, grayscale=False, bpart="all", num_pick=
     print("****** Saving Model")
     # save model after success training
     util.create_dir(MODEL_PATH)
+    model_path = os.path.join(MODEL_PATH, "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}.h5".format(
+            bpart, num_pick, img_size, datetime.datetime.now()
+        )
+    )
     keras.models.save_model(
         model,
-        os.path.join(MODEL_PATH, "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}.h5".format(
-            bpart, num_pick, img_size, datetime.datetime.now()
-        ))
+        model_path
     )
 
     print("****** Writing Predictions")
     # run prediction on validation set and save result in csv
-    write_prediction(model, img_valid, path_valid, batch_size, valid_df)
+    result_path = write_prediction(model, img_valid, path_valid, batch_size, valid_df)
 
-    return history
+    return history, model_path, result_path
 
 
 def write_prediction(model, imgs, paths, batch_size, valid_df):
@@ -317,17 +364,21 @@ def write_prediction(model, imgs, paths, batch_size, valid_df):
     :param batch_size: number of inputs in each batch.
     :param valid_df: validation dataset table
     :return:
+        path to result result csv
     """
     predictions = model.predict(imgs, batch_size=batch_size)
     util.create_dir(RESULT_PATH)
     for i in range(len(predictions)):
         idx = valid_df.index[valid_df["path"] == paths[i]].tolist()[0]
         valid_df.at[idx, "prediction"] = predictions[i]
-    valid_df.to_csv(
-        os.path.join(RESULT_PATH, "vgg_{:%Y-%m-%d-%H%M}.csv".format(
+
+    result_path = os.path.join(RESULT_PATH, "vgg_{:%Y-%m-%d-%H%M}.csv".format(
             datetime.datetime.now()
-        ))
+        )
     )
+    valid_df.to_csv(result_path)
+
+    return result_path
 
 
 if __name__ == "__main__":

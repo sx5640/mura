@@ -124,7 +124,7 @@ def plt_cam(model, img, ax, idx, layer_idx=None):
     ax[idx].set_title("Heatmap")
 
 
-def plt_attention(model_path, img_path=None, bpart="all", img_size=512, **kwargs):
+def plt_attention(model_path, img_path=None, bpart="all", img_size=224, **kwargs):
     """
     Plot attention graph, including saliency and CAM.
 
