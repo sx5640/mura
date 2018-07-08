@@ -201,7 +201,7 @@ def kappa(predict, label):
     poss_pos = (true_pos + false_neg) * (true_pos + false_pos) / (sm ** 2)
     poss_neg = (true_neg + false_neg) * (true_neg + false_pos) / (sm ** 2)
     poss_agree = poss_pos + poss_neg
-    return (obs_agree - poss_agree) / (1 - poss_agree)
+    return (obs_agree - poss_agree) / (1 - poss_agree + np.finfo(np.float).eps)
 
 
 def recall(predict, label):
@@ -217,7 +217,7 @@ def recall(predict, label):
         recall
     """
     true_pos, true_neg, false_pos, false_neg, sm = basic_metrics(predict, label)
-    return true_pos / (true_pos + false_neg)
+    return true_pos / (true_pos + false_neg + np.finfo(np.float).eps)
 
 
 def precision(predict, label):
@@ -233,7 +233,7 @@ def precision(predict, label):
         precision
     """
     true_pos, true_neg, false_pos, false_neg, sm = basic_metrics(predict, label)
-    return true_pos / (true_pos + false_pos)
+    return true_pos / (true_pos + false_pos + np.finfo(np.float).eps)
 
 
 def accuracy(predict, label):
@@ -248,4 +248,4 @@ def accuracy(predict, label):
         accuracy
     """
     true_pos, true_neg, false_pos, false_neg, sm = basic_metrics(predict, label)
-    return (true_pos + true_neg) / sm
+    return (true_pos + true_neg) / (sm + np.finfo(np.float).eps)

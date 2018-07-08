@@ -2,16 +2,14 @@
 Visualization of a given model
 """
 import argparse
-import math
 
 import dataset
 import util
 
-import cv2
-import imageio
 import keras
 import matplotlib.pyplot as plt
 import numpy as np
+import tqdm
 import vis.utils.utils as vutils
 import vis.visualization as vvis
 
@@ -48,28 +46,28 @@ def prediction_layer_linear_activation(model):
     return util.reload_model(model)
 
 
-def get_seed_image(bpart, img_size, img_path):
+def get_seed_image(bpart, img_size, img_path, grayscale):
     """
     Utility method for getting a seeding image to visualize attention.
     Pick a random image from validation set, unless img_path is specified.
     :param bpart: Body part to pick.
     :param img_size: Image size to reshape to.
     :param img_path: path to image file.
+    :param grayscale: Import image as grayscale or RGB
     :return: Keras model
     """
     _, valid_labeled, _, valid_path = dataset.load_dataframe()
     if not img_path:
         df_valid = dataset.build_dataframe(valid_labeled, valid_path)
-        df_valid = df_valid[df_valid["body_part"] == bpart]
+        if bpart != "all":
+            df_valid = df_valid[df_valid["body_part"] == bpart]
         rdm_row = df_valid.sample(1).iloc[0]
         img_path = rdm_row["path"]
         label = rdm_row["label"]
     else:
         label = valid_labeled[valid_labeled["path"] == img_path].iloc[0]["label"]
-    img = imageio.imread(img_path)
-    img = dataset.grayscale(img)
-    img = dataset.zero_pad(img)
-    img = cv2.resize(img, (img_size, img_size)).reshape((img_size, img_size, 1))
+    img = dataset.load_image(img_path, grayscale)
+    img = dataset.resize_img(img, img_size)
     return img, img_path, label
 
 
@@ -124,7 +122,7 @@ def plt_cam(model, img, ax, idx, layer_idx=None):
     ax[idx].set_title("Heatmap")
 
 
-def plt_attention(model_path, img_path=None, bpart="all", img_size=224, **kwargs):
+def plt_attention(model_path, img_path=None, bpart="all", img_size=224, grayscale=False, **kwargs):
     """
     Plot attention graph, including saliency and CAM.
 
@@ -132,13 +130,14 @@ def plt_attention(model_path, img_path=None, bpart="all", img_size=224, **kwargs
     :param img_path: Path to a validation image. Optional
     :param bpart: Body part to pick if img_path not given
     :param img_size: Size of the image to reshape to
+    :param grayscale: Import image as grayscale or RGB
     :param kwargs: Unused arguments
     :return:
     """
     model = import_model(model_path)
     model = prediction_layer_linear_activation(model)
 
-    img, path, label = get_seed_image(bpart, img_size, img_path)
+    img, path, label = get_seed_image(bpart, img_size, img_path, grayscale)
 
     prediction = model.predict(np.asarray([img]))
 
@@ -160,7 +159,7 @@ def plt_attention(model_path, img_path=None, bpart="all", img_size=224, **kwargs
     plt.show()
 
 
-def plt_activation(model_path, layer_idx=-1, max_iter=None, **kwargs):
+def plt_activation(model_path, layer_idx=-1, max_iter=200, **kwargs):
     """
     Plot activation of a given layer in a model by generating an image that
     maximizes the output of all `filter_indices` in the given `layer_idx`.
@@ -179,12 +178,12 @@ def plt_activation(model_path, layer_idx=-1, max_iter=None, **kwargs):
         img = vvis.visualize_activation(
             model, layer_idx, max_iter=max_iter, filter_indices=None
         )
-    else:
+    elif type(model.layers[layer_idx]) == keras.layers.Conv2D:
         filters = np.arange(vvis.get_num_filters(model.layers[layer_idx]))
 
         # Generate input image for each filter.
         vis_images = []
-        for idx in filters:
+        for idx in tqdm.tqdm(filters):
             act_img = vvis.visualize_activation(
                 model, layer_idx, max_iter=max_iter, filter_indices=idx
             )
@@ -192,10 +191,46 @@ def plt_activation(model_path, layer_idx=-1, max_iter=None, **kwargs):
             vis_images.append(act_img)
 
         # Generate stitched image palette with 8 cols.
-        img = vutils.stitch_images(vis_images, cols=math.floor(math.sqrt(len(vis_images)*2)))
-
+        img = vutils.stitch_images(vis_images, cols=8)
+    else:
+        raise TypeError(
+            "Invalid Layer type. model.layers[{}] is {}, "
+            "only Dense and Conv2D layers can be used".format(
+                str(layer_idx), str(type(model.layers[layer_idx]))
+            )
+        )
     plt.axis('off')
     plt.imshow(img.reshape(img.shape[0:2]), cmap="gray")
+    plt.show()
+
+
+def plot_history(hist):
+    """
+    Plot history of the model's loss and evaluation metric during training
+    Args:
+        hist: history returned by model.fit
+
+    Returns:
+
+    """
+    metrics = []
+    for key in hist.history.keys():
+        if "loss" not in key:
+            metrics.append(key)
+            plt.plot(hist.history[key])
+    plt.title("Metrics")
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(metrics, loc='lower right')
+    plt.show()
+
+    # summarize history for loss
+    plt.plot(hist.history['loss'])
+    plt.plot(hist.history['val_loss'])
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'val'], loc='upper left')
     plt.show()
 
 
