@@ -3,16 +3,16 @@ A simple implementation of VGGNet.
 """
 import argparse
 import datetime
+import math
 import os
 import pickle
-import re
 
 import keras
 import numpy as np
 import pandas as pd
-import tqdm
 
 import dataset
+import metric
 import util
 
 
@@ -79,28 +79,6 @@ def build_model(img_size, color_channel, l1, l2):
     return model
 
 
-def prepare_training_imgs(df, grayscale, parent_dir):
-    """
-    Utility method for loading all the images in the training dataframe and saving them
-    to provided directory that can be imported with ImageDataGenerator.flow_from_directory()
-    Args:
-        df: Dataframe that contains all the images need to be loaded
-        grayscale: Import image as grayscale or RGB
-        parent_dir: Directory to place the images
-
-    Returns:
-
-    """
-    for index, row in tqdm.tqdm(df.iterrows()):
-        img = dataset.load_image(row["path"], grayscale)
-        label = row["label"]
-        match = re.search("image\d+", row["path"])
-        filename = match.group(0)
-        filename = "{}_{}.png".format(row["study"], filename)
-        filename = os.path.join(parent_dir, str(label), filename)
-        dataset.save_img(img, filename)
-
-
 def load_imgs(df, grayscale, img_size):
     """
     Generator that loads all the images from the dataframe and and return them
@@ -127,15 +105,13 @@ def load_imgs(df, grayscale, img_size):
     return np.asarray(imgs), np.asarray(labels), np.asarray(paths)
 
 
-def load_resources(bpart, num_pick, color_mode, img_size):
+def load_resources(bpart, num_pick):
     """
     Utility method that load all the resources needed for training.
     Will use csv/pickle/recreated images as cache to avoid recomputation.
     Args:
         bpart: Body part to pick
         num_pick: Number of images to pick from each study in training set
-        color_mode: Import image as grayscale or RGB
-        img_size: Image size to resize all images to
 
     Returns: train_df, valid_df, img_valid, label_valid, path_valid, flow_dir
 
@@ -150,22 +126,7 @@ def load_resources(bpart, num_pick, color_mode, img_size):
         "valid_table_{}.csv".format(bpart)
     )
 
-    flow_dir = os.path.join(
-        DATA_CACHE_PATH,
-        "datasets", "{}_{}_{}".format(
-            bpart, num_pick, color_mode
-        ),
-        "training"
-    )
-
-    valid_pickle_path = os.path.join(
-        DATA_CACHE_PATH,
-        "valid_images_{}_{}_{}.pickle".format(
-            bpart, img_size, color_mode
-        )
-    )
-
-    # Load datasets from scvs. If not exist, recreate from dataset.py and save to csvs
+    # Load datasets from csvs. If not exist, recreate from dataset.py and save to csvs
     try:
         train_df = pd.read_csv(train_table_path, index_col=0)
         valid_df = pd.read_csv(valid_table_path, index_col=0)
@@ -185,6 +146,86 @@ def load_resources(bpart, num_pick, color_mode, img_size):
         train_df.to_csv(train_table_path)
         valid_df.to_csv(valid_table_path)
 
+    return train_df, valid_df
+
+
+def input_generator(df, batch_size, img_size, grayscale, imggen=None):
+    """
+    Generator that yields a batch of training images with their labels
+    Args:
+        df: Dataframe that contains all the images need to be loaded
+        batch_size: Maximum number of images in each batch
+        grayscale: Import image as grayscale or RGB
+        img_size: Image size to resize the image to if not equals IMG_SIZE
+        imggen: ImageDataGenerator used to apply perturbation. If None,
+            then no perturbation is applied.
+
+    Yields: List of training images and labels in a batch
+
+    """
+    while True:
+        # loop once per epoch
+        df = df.sample(frac=1).reset_index(drop=True)
+        for g, batch in df.groupby(np.arange(len(df)) // batch_size):
+            imgs = []
+            labels = []
+            for index, row in batch.iterrows():
+                img = dataset.load_image(row["path"], grayscale)
+                if img_size != IMG_SIZE and img_size > 0:
+                    img = dataset.resize_img(img, img_size)
+                if imggen:
+                    img = imggen.random_transform(img)
+                imgs.append(img)
+                labels.append(row["label"])
+
+            yield np.asarray(imgs), np.asarray(labels)
+
+
+def img_generator(df, batch_size, img_size, grayscale):
+    """
+    Generator that yields a batch of validation images with their labels
+    Args:
+        df: Dataframe that contains all the images need to be loaded
+        batch_size: Maximum number of images in each batch
+        grayscale: Import image as grayscale or RGB
+        img_size: Image size to resize the image to if not equals IMG_SIZE
+
+    Yields: List of training images and labels in a batch
+
+    """
+    while True:
+        # loop once per epoch
+        for g, batch in df.groupby(np.arange(len(df)) // batch_size):
+            imgs = []
+            for index, row in batch.iterrows():
+                img = dataset.load_image(row["path"], grayscale)
+                if img_size != IMG_SIZE and img_size > 0:
+                    img = dataset.resize_img(img, img_size)
+                imgs.append(img)
+
+            yield np.asarray(imgs)
+
+
+def load_validation(valid_df, bpart, grayscale, img_size):
+    """
+    Load Validation images into memory. To be removed once the bug with
+    validation_data=generator is resolved.
+    Args:
+        valid_df:
+        bpart:
+        grayscale:
+        img_size:
+
+    Returns:
+
+    """
+    color_mode = "grayscale" if grayscale else "rgb"
+    valid_pickle_path = os.path.join(
+        DATA_CACHE_PATH,
+        "valid_images_{}_{}_{}.pickle".format(
+            bpart, img_size, color_mode
+        )
+    )
     try:
         with open(valid_pickle_path, "rb") as file:
             img_valid, label_valid, path_valid = pickle.load(file)
@@ -197,11 +238,7 @@ def load_resources(bpart, num_pick, color_mode, img_size):
                 protocol=4
             )
 
-    # Preprocess images and save them to disk
-    if not os.path.exists(flow_dir):
-        prepare_training_imgs(train_df, color_mode, flow_dir)
-
-    return train_df, valid_df, img_valid, label_valid, path_valid, flow_dir
+    return img_valid, label_valid, path_valid
 
 
 def train(resize=True, load_param=False, grayscale=False, bpart="all", num_pick=0,
@@ -222,14 +259,18 @@ def train(resize=True, load_param=False, grayscale=False, bpart="all", num_pick=
     :param decay: decay per epoch, which learning rate is is calculated by
         lr *= (1. / (1. + decay * iterations))
     :param kwargs: extra parameters
-    :return: A History object. Its History.history attribute is a record of training
+    :return:
+        A History object. Its History.history attribute is a record of training
         loss values and metrics values at successive epochs, as well as validation loss
         values and validation metrics values (if applicable).
+
+        Path to where the model is been saved
+
+        Path to where the result csv is been saved
     """
     # prepare training params
     img_size = VGG_INPUT_SIZE if resize else IMG_SIZE
 
-    color_mode = "grayscale" if grayscale else "rgb"
     color_channel = 1 if grayscale else 3
 
     print("****** Building Model")
@@ -241,30 +282,34 @@ def train(resize=True, load_param=False, grayscale=False, bpart="all", num_pick=
         epsilon=None, decay=decay, amsgrad=False
     )
 
-    global_recall = util.BinaryRecall()
-    global_kappa = util.BinaryKappa()
+    global_recall = metric.BinaryRecall()
+    global_kappa = metric.BinaryKappa()
 
     model.compile(
         loss='binary_crossentropy',
         optimizer=adam,
-        metrics=[keras.metrics.binary_accuracy, util.batch_recall, global_recall, global_kappa]
+        metrics=[keras.metrics.binary_accuracy, metric.batch_recall, global_recall, global_kappa]
     )
 
     print("****** Preparing Input")
-    train_df, valid_df, img_valid, label_valid, path_valid, flow_dir = \
-        load_resources(bpart, num_pick, color_mode, img_size)
+    train_df, valid_df = load_resources(bpart, num_pick)
 
-    print("****** Preparing ImageDataGenerator")
-    imggen = keras.preprocessing.image.ImageDataGenerator(
+    print("****** Preparing Training Image Generator")
+    imggen_args = dict(
         featurewise_center=True,
         featurewise_std_normalization=True,
         rotation_range=30,
         fill_mode="constant",
         cval=0,
-        horizontal_flip=True)
-
+        horizontal_flip=True
+    )
+    input_img_gen = keras.preprocessing.image.ImageDataGenerator(**imggen_args)
     samples, _, _ = load_imgs(train_df.sample(1000), grayscale, img_size)
-    imggen.fit(np.asarray(samples))
+    input_img_gen.fit(np.asarray(samples))
+
+    # TODO: Remove this once the bug with `validation_data=input_generator` is resolved.
+    print("****** Loading Validation Inputs")
+    valid_imgs, valid_labels, _ = load_validation(valid_df, bpart, grayscale, img_size)
 
     # log training time
     start_time = datetime.datetime.now()
@@ -277,57 +322,64 @@ def train(resize=True, load_param=False, grayscale=False, bpart="all", num_pick=
     util.create_dir(log_path)
     tfboard = keras.callbacks.TensorBoard(log_dir=log_path, write_grads=True)
     history = model.fit_generator(
-        imggen.flow_from_directory(
-            flow_dir,
-            target_size=(img_size, img_size),
-            batch_size=batch_size,
-            class_mode='binary',
-            color_mode=color_mode
-        ),
-        epochs=epochs, verbose=2,
-        validation_data=(img_valid, label_valid),
-        callbacks=[tfboard]
+        input_generator(train_df, batch_size, img_size, grayscale, input_img_gen),
+        steps_per_epoch=math.ceil(train_df.shape[0]/batch_size),
+        epochs=epochs,
+        verbose=2,
+        validation_data=(valid_imgs, valid_labels),
+        # validation_data=input_generator(valid_df, batch_size, img_size, grayscale),
+        # validation_steps=math.ceil(valid_df.shape[0]/batch_size),
+        callbacks=[tfboard],
+        workers=4
     )
     print('****** Training time: %s' % (datetime.datetime.now() - start_time))
 
     print("****** Saving Model")
     # save model after success training
     util.create_dir(MODEL_PATH)
+    model_path = os.path.join(MODEL_PATH, "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}.h5".format(
+            bpart, num_pick, img_size, datetime.datetime.now()
+        )
+    )
     keras.models.save_model(
         model,
-        os.path.join(MODEL_PATH, "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}.h5".format(
-            bpart, num_pick, img_size, datetime.datetime.now()
-        ))
+        model_path
     )
 
     print("****** Writing Predictions")
     # run prediction on validation set and save result in csv
-    write_prediction(model, img_valid, path_valid, batch_size, valid_df)
+    result_path = write_prediction(model, valid_df, batch_size, img_size, grayscale)
 
-    return history
+    return history, model_path, result_path
 
 
-def write_prediction(model, imgs, paths, batch_size, valid_df):
+def write_prediction(model, valid_df, batch_size, img_size, grayscale):
     """
     Run prediction using given model on a list of images,
     and write the result to a csv file.
     :param model: model to run prediction on
-    :param imgs: images to predict
-    :param paths: list of image paths
     :param batch_size: number of inputs in each batch.
     :param valid_df: validation dataset table
+    :param img_size: Image size to resize the image to if not equals IMG_SIZE
+    :param grayscale: Import image as grayscale or RGB
     :return:
+        path to result result csv
     """
-    predictions = model.predict(imgs, batch_size=batch_size)
+    predictions = model.predict_generator(
+        img_generator(valid_df, batch_size, img_size, grayscale),
+        steps=math.ceil(valid_df.shape[0]/batch_size)
+    )
     util.create_dir(RESULT_PATH)
     for i in range(len(predictions)):
-        idx = valid_df.index[valid_df["path"] == paths[i]].tolist()[0]
-        valid_df.at[idx, "prediction"] = predictions[i]
-    valid_df.to_csv(
-        os.path.join(RESULT_PATH, "vgg_{:%Y-%m-%d-%H%M}.csv".format(
+        valid_df.at[i, "prediction"] = predictions[i]
+
+    result_path = os.path.join(RESULT_PATH, "vgg_{:%Y-%m-%d-%H%M}.csv".format(
             datetime.datetime.now()
-        ))
+        )
     )
+    valid_df.to_csv(result_path)
+
+    return result_path
 
 
 if __name__ == "__main__":
