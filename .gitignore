@@ -109,7 +109,7 @@ venv.bak/
 # Resources
 references/
 weights/
-models/
+saved_models/
 dataset/
 cache/
 results/
