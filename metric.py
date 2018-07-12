@@ -2,6 +2,7 @@
 Metrics for model and result evaluation
 """
 import keras
+import keras.backend as K
 import numpy as np
 
 
@@ -18,13 +19,13 @@ def batch_recall(y_true, y_pred):
     Computes the recall, a metric for multilabel classification of
     how many relevant items are selected.
     """
-    true_positives = keras.backend.sum(
-        keras.backend.round(keras.backend.clip(y_true * y_pred, 0, 1))
+    true_positives = K.sum(
+        K.round(K.clip(y_true * y_pred, 0, 1))
     )
-    possible_positives = keras.backend.sum(
-        keras.backend.round(keras.backend.clip(y_true, 0, 1))
+    possible_positives = K.sum(
+        K.round(K.clip(y_true, 0, 1))
     )
-    return true_positives / (possible_positives + keras.backend.epsilon())
+    return true_positives / (possible_positives + K.epsilon())
 
 
 class BinaryRecall(keras.layers.Layer):
@@ -41,12 +42,12 @@ class BinaryRecall(keras.layers.Layer):
     def __init__(self, name='global_recall', **kwargs):
         super(BinaryRecall, self).__init__(name=name, **kwargs)
         self.stateful = True
-        self.true_positives = keras.backend.variable(value=0, dtype='int32')
-        self.possible_positives = keras.backend.variable(value=0, dtype='int32')
+        self.true_positives = K.variable(value=0, dtype='int32')
+        self.possible_positives = K.variable(value=0, dtype='int32')
 
     def reset_states(self):
-        keras.backend.set_value(self.true_positives, 0)
-        keras.backend.set_value(self.possible_positives, 0)
+        K.set_value(self.true_positives, 0)
+        K.set_value(self.possible_positives, 0)
 
     def __call__(self, y_true, y_pred):
         """Computes the recall in a batch.
@@ -56,22 +57,22 @@ class BinaryRecall(keras.layers.Layer):
         # Returns
             The overall recall seen this epoch at the completion of the batch.
         """
-        y_true = keras.backend.cast(y_true, 'int32')
-        y_pred = keras.backend.cast(keras.backend.round(y_pred), 'int32')
-        true_pos = keras.backend.cast(keras.backend.sum(y_pred * y_true), 'int32')
-        poss_pos = keras.backend.cast(keras.backend.sum(y_true), 'int32')
+        y_true = K.cast(y_true, 'int32')
+        y_pred = K.cast(K.round(y_pred), 'int32')
+        true_pos = K.cast(K.sum(y_pred * y_true), 'int32')
+        poss_pos = K.cast(K.sum(y_true), 'int32')
 
         self.add_update(
-            keras.backend.update_add(self.true_positives, true_pos),
+            K.update_add(self.true_positives, true_pos),
             inputs=[y_true, y_pred]
         )
         self.add_update(
-            keras.backend.update_add(self.possible_positives, poss_pos),
+            K.update_add(self.possible_positives, poss_pos),
             inputs=[y_true, y_pred]
         )
-        true_pos = keras.backend.cast(self.true_positives * 1, "float32")
-        poss_pos = keras.backend.cast(self.possible_positives * 1, "float32")
-        return true_pos / (keras.backend.epsilon() + poss_pos)
+        true_pos = K.cast(self.true_positives * 1, "float32")
+        poss_pos = K.cast(self.possible_positives * 1, "float32")
+        return true_pos / (K.epsilon() + poss_pos)
 
 
 class BinaryKappa(keras.layers.Layer):
@@ -88,16 +89,16 @@ class BinaryKappa(keras.layers.Layer):
     def __init__(self, name='global_kappa', **kwargs):
         super(BinaryKappa, self).__init__(name=name, **kwargs)
         self.stateful = True
-        self.true_positives = keras.backend.variable(value=0, dtype='int32')
-        self.true_negative = keras.backend.variable(value=0, dtype='int32')
-        self.false_positives = keras.backend.variable(value=0, dtype='int32')
-        self.false_negative = keras.backend.variable(value=0, dtype='int32')
+        self.true_positives = K.variable(value=0, dtype='int32')
+        self.true_negative = K.variable(value=0, dtype='int32')
+        self.false_positives = K.variable(value=0, dtype='int32')
+        self.false_negative = K.variable(value=0, dtype='int32')
 
     def reset_states(self):
-        keras.backend.set_value(self.true_positives, 0)
-        keras.backend.set_value(self.true_negative, 0)
-        keras.backend.set_value(self.false_positives, 0)
-        keras.backend.set_value(self.false_negative, 0)
+        K.set_value(self.true_positives, 0)
+        K.set_value(self.true_negative, 0)
+        K.set_value(self.false_positives, 0)
+        K.set_value(self.false_negative, 0)
 
     def __call__(self, y_true, y_pred):
         """Computes the kappa in a batch.
@@ -107,53 +108,53 @@ class BinaryKappa(keras.layers.Layer):
         # Returns
             The kappa seen this epoch at the completion of the batch.
         """
-        y_true = keras.backend.cast(y_true, 'int32')
-        y_pred = keras.backend.cast(keras.backend.round(y_pred), 'int32')
-        true_pos = keras.backend.cast(
-            keras.backend.sum(y_pred * y_true),
+        y_true = K.cast(y_true, 'int32')
+        y_pred = K.cast(K.round(y_pred), 'int32')
+        true_pos = K.cast(
+            K.sum(y_pred * y_true),
             'int32'
         )
-        true_neg = keras.backend.cast(
-            keras.backend.sum((1 - y_pred) * (1 - y_true)),
+        true_neg = K.cast(
+            K.sum((1 - y_pred) * (1 - y_true)),
             'int32'
         )
-        false_pos = keras.backend.cast(
-            keras.backend.sum(y_pred * (1 - y_true)),
+        false_pos = K.cast(
+            K.sum(y_pred * (1 - y_true)),
             'int32'
         )
-        false_neg = keras.backend.cast(
-            keras.backend.sum((1 - y_pred) * y_true),
+        false_neg = K.cast(
+            K.sum((1 - y_pred) * y_true),
             'int32'
         )
 
         self.add_update(
-            keras.backend.update_add(self.true_positives, true_pos),
+            K.update_add(self.true_positives, true_pos),
             inputs=[y_true, y_pred]
         )
         self.add_update(
-            keras.backend.update_add(self.true_negative, true_neg),
+            K.update_add(self.true_negative, true_neg),
             inputs=[y_true, y_pred]
         )
         self.add_update(
-            keras.backend.update_add(self.false_positives, false_pos),
+            K.update_add(self.false_positives, false_pos),
             inputs=[y_true, y_pred]
         )
         self.add_update(
-            keras.backend.update_add(self.false_negative, false_neg),
+            K.update_add(self.false_negative, false_neg),
             inputs=[y_true, y_pred]
         )
 
-        true_pos = keras.backend.cast(self.true_positives * 1, "float32")
-        true_neg = keras.backend.cast(self.true_negative * 1, "float32")
-        false_pos = keras.backend.cast(self.false_positives * 1, "float32")
-        false_neg = keras.backend.cast(self.false_negative * 1, "float32")
+        true_pos = K.cast(self.true_positives * 1, "float32")
+        true_neg = K.cast(self.true_negative * 1, "float32")
+        false_pos = K.cast(self.false_positives * 1, "float32")
+        false_neg = K.cast(self.false_negative * 1, "float32")
 
         sm = true_pos + true_neg + false_pos + false_neg
         obs_agree = (true_pos + true_neg) / sm
         poss_pos = (true_pos + false_neg) * (true_pos + false_pos) / (sm**2)
         poss_neg = (true_neg + false_neg) * (true_neg + false_pos) / (sm**2)
         poss_agree = poss_pos + poss_neg
-        return (obs_agree - poss_agree) / (1 - poss_agree)
+        return (obs_agree - poss_agree) / (1 - poss_agree + K.epsilon())
 
 
 #################################

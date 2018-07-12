@@ -36,7 +36,7 @@ def get_model_memory_usage(batch_size, model):
         [keras.backend.count_params(p) for p in set(model.non_trainable_weights)]
     )
     # total memory = 4 bytes * total number of numbers in each run * number of images in each run
-    total_memory = 4.0 * batch_size * (shapes_mem_count + trainable_count + non_trainable_count)
+    total_memory = 4.0 * batch_size * (shapes_mem_count + 2 * trainable_count + non_trainable_count)
     # convert to GB
     gbytes = np.round(total_memory / (1024.0 ** 3), 3)
     return gbytes
@@ -82,3 +82,18 @@ def reload_model(model):
         os.remove(model_path)
 
     return model
+
+
+def find_last_conv2d(model):
+    """
+    Find the layer index of the last conv2D layer.
+    Args:
+        model: Model to find.
+
+    Returns:
+        index of the last conv2D layer.
+    """
+    for i in range(len(model.layers) - 1, -1, -1):
+        if isinstance(model.layers[i], keras.layers.convolutional._Conv):
+            return i
+    return None

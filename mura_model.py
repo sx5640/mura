@@ -39,8 +39,8 @@ class MuraModel(abc.ABC):
     TRAIN_PARSER.add_argument("--grayscale", action="store_true",
                               help="load image as grayscale instead of RGB")
 
-    TRAIN_PARSER.add_argument("--load_param", action="store_true",
-                              help="load parameters from pretrained model")
+    TRAIN_PARSER.add_argument("--reload", action="store_true",
+                              help="reload saved model after training for evaluation")
 
     TRAIN_PARSER.add_argument("-e", "--epochs", type=int,
                               help="number of epochs to run")
@@ -54,11 +54,8 @@ class MuraModel(abc.ABC):
     TRAIN_PARSER.add_argument("-w", "--weights", type=str,
                               help="path to pretrained weights to import")
 
-    TRAIN_PARSER.add_argument("-l1", "--l1", type=float,
-                              help="L1 regularization applied to each convolutional layer")
-
-    TRAIN_PARSER.add_argument("-l2", "--l2", type=float,
-                              help="L2 regularization applied to each convolutional layer")
+    TRAIN_PARSER.add_argument("-v", "--verbose", type=int,
+                              help="verbosity during training")
 
     TRAIN_PARSER.add_argument("-bp", "--bpart", type=str,
                               help="body part to use for training and prediction")
@@ -73,26 +70,51 @@ class MuraModel(abc.ABC):
     ROOT_PATH = os.path.abspath(__file__)  # ?/mura_model.py
     ROOT_PATH = os.path.dirname(ROOT_PATH)  # ?/
 
-    def __init__(self, model_name, resize=True, grayscale=False, **kwargs):
+    @classmethod
+    def train_from_cli(cls):
+        args = cls.ARG_PARSER.parse_args()
+        arg_dict = {k: v for k, v in vars(args).items() if v is not None}
+        model = cls(**arg_dict)
+        model.train(**arg_dict)
+
+    def __init__(self, model_root_path, resize=True, grayscale=False, **kwargs):
         self.img_size_origin = 512
         self.img_size = None
         self.img_resized = resize
         self.img_grayscale = grayscale
         self.color_channel = 1 if grayscale else 3
-        self.model_root_path = os.path.join(self.ROOT_PATH, "models", model_name)   # ?/models/{model_name}
+        self.model_root_path = model_root_path                                      # ?/models/{model_name}
         self.weight_path = os.path.join(self.ROOT_PATH, "weights")                  # ?/weights/
         self.model_save_path = os.path.join(self.model_root_path, "saved_models")   # ?/models/{model_name}/saved_models
         self.result_path = os.path.join(self.model_root_path, "results")            # ?/models/{model_name}/results
         self.cache_path = os.path.join(self.ROOT_PATH, "cache")                     # ?/cache
-        self.log_path = os.path.join(self.model_root_path, "logs", model_name)      # /models/{model_name}/logs
+        self.log_path = os.path.join(self.model_root_path, "logs")                  # /models/{model_name}/logs
         self.model = None
 
-    def load_imgs(self, df):
+    def load_and_process_image(self, path, imggen=None):
+        """
+        Load and preprocess a single image
+        Args:
+            path: path to image file.
+            imggen: Image Generator for performing image perturbation
+
+        Returns:
+            image in ndarray
+        """
+        img = dataset.load_image(path, self.img_grayscale)
+        if self.img_resized:
+            img = dataset.resize_img(img, self.img_size)
+        if imggen:
+            img = imggen.random_transform(img)
+        return img
+
+    def load_imgs(self, df, imggen=None):
         """
         Generator that loads all the images from the dataframe and and return them
         as ndarrays
         Args:
             df: Dataframe that contains all the images need to be loaded
+            imggen: Image Generator for performing image perturbation
 
         Yields: list of resized images in ndarray, list of labels, list of path
 
@@ -101,9 +123,7 @@ class MuraModel(abc.ABC):
         labels = []
         paths = []
         for index, row in df.iterrows():
-            img = dataset.load_image(row["path"], self.img_grayscale)
-            if self.img_resized:
-                img = dataset.resize_img(img, self.img_size)
+            img = self.load_and_process_image(row["path"], imggen)
             imgs.append(img)
             labels.append(row["label"])
             paths.append(row["path"])
@@ -155,7 +175,7 @@ class MuraModel(abc.ABC):
 
     def input_generator(self, df, batch_size, imggen=None):
         """
-        Generator that yields a batch of training images with their labels
+        Generator that yields a batch of images with their labels
         Args:
             df: Dataframe that contains all the images need to be loaded
             batch_size: Maximum number of images in each batch
@@ -169,22 +189,13 @@ class MuraModel(abc.ABC):
             # loop once per epoch
             df = df.sample(frac=1).reset_index(drop=True)
             for g, batch in df.groupby(np.arange(len(df)) // batch_size):
-                imgs = []
-                labels = []
-                for index, row in batch.iterrows():
-                    img = dataset.load_image(row["path"], self.img_grayscale)
-                    if self.img_resized:
-                        img = dataset.resize_img(img, self.img_size)
-                    if imggen:
-                        img = imggen.random_transform(img)
-                    imgs.append(img)
-                    labels.append(row["label"])
+                imgs, labels, _ = self.load_imgs(batch, imggen)
 
-                yield np.asarray(imgs), np.asarray(labels)
+                yield imgs, labels
 
     def img_generator(self, df, batch_size):
         """
-        Generator that yields a batch of validation images with their labels
+        Generator that yields a batch of  images
         Args:
             df: Dataframe that contains all the images need to be loaded
             batch_size: Maximum number of images in each batch
@@ -195,63 +206,70 @@ class MuraModel(abc.ABC):
         while True:
             # loop once per epoch
             for g, batch in df.groupby(np.arange(len(df)) // batch_size):
-                imgs = []
-                for index, row in batch.iterrows():
-                    img = dataset.load_image(row["path"], self.img_grayscale)
-                    if self.img_resized:
-                        img = dataset.resize_img(img, self.img_size)
-                    imgs.append(img)
+                imgs, _, _ = self.load_imgs(batch)
+                yield imgs
 
-                yield np.asarray(imgs)
-
-    def load_validation(self, valid_df, bpart):
+    def load_validation(self, valid_df):
         """
         Load Validation images into memory.
         TODO: Remove once the bug with validation_data=generator is resolved.
         Args:
             valid_df:
-            bpart:
 
         Returns:
 
         """
-        color_mode = "grayscale" if self.img_grayscale else "rgb"
-        valid_pickle_path = os.path.join(
-            self.cache_path,
-            "valid_images_{}_{}_{}.pickle".format(
-                bpart, self.img_size, color_mode
-            )
-        )
-        try:
-            with open(valid_pickle_path, "rb") as file:
-                img_valid, label_valid, path_valid = pickle.load(file)
-        except FileNotFoundError:
-            img_valid, label_valid, path_valid = self.load_imgs(valid_df)
-            with open(valid_pickle_path, "wb") as file:
-                pickle.dump(
-                    [img_valid, label_valid, path_valid],
-                    file,
-                    protocol=4
-                )
+        img_valid, label_valid, path_valid = self.load_imgs(valid_df)
 
         return img_valid, label_valid, path_valid
 
-    def train(self, weight=None, bpart="all", num_pick=0,
-              batch_size=32, epochs=50, learning_rate=0.0001, decay=0,
-              l1=0.0, l2=0.0, **kwargs):
+    def prepare_imggen(self, df):
+        """
+        Prepare Image Generator responsible for image perturbation.
+        Args:
+            df: Dataframe that contains all the images to sample from.
+
+        Returns:
+
+        """
+        imggen_args = dict(
+            featurewise_center=True,
+            featurewise_std_normalization=True,
+            rotation_range=30,
+            fill_mode="constant",
+            cval=0,
+            horizontal_flip=True
+        )
+        imggen = keras.preprocessing.image.ImageDataGenerator(**imggen_args)
+        samples, _, _ = self.load_imgs(df.sample(1000))
+        imggen.fit(np.asarray(samples))
+        return imggen
+
+    def train(
+            self,
+            bpart="all",
+            num_pick=0,
+            batch_size=32,
+            epochs=50,
+            learning_rate=0.0001,
+            decay=0,
+            verbose=2,
+            reload=True,
+            **kwargs
+    ):
         """
         Build and train a VGGNet model.
-        :param weight: path to pretrained weights.
         :param bpart: Body part to train on.
         :param num_pick: Number of images to pick per patient.
         :param batch_size: number of inputs in each batch.
         :param epochs: number of epochs to run before ending.
         :param learning_rate: initial learning rate.
-        :param l1: L1 regularization applied to each convolutional layer.
-        :param l2: L2 regularization applied to each convolutional layer.
         :param decay: decay per epoch, which learning rate is is calculated by
             lr *= (1. / (1. + decay * iterations))
         :param kwargs: extra parameters
+        :param verbose: level of verbosity during training
+        :param reload: reload model after training for evaluation
+
         :return:
             A History object. Its History.history attribute is a record of training
             loss values and metrics values at successive epochs, as well as validation loss
@@ -280,56 +298,61 @@ class MuraModel(abc.ABC):
         train_df, valid_df = self.load_resources(bpart, num_pick)
 
         print("****** Preparing Training Image Generator")
-        imggen_args = dict(
-            featurewise_center=True,
-            featurewise_std_normalization=True,
-            rotation_range=30,
-            fill_mode="constant",
-            cval=0,
-            horizontal_flip=True
-        )
-        input_img_gen = keras.preprocessing.image.ImageDataGenerator(**imggen_args)
-        samples, _, _ = self.load_imgs(train_df.sample(1000))
-        input_img_gen.fit(np.asarray(samples))
+        input_img_gen = self.prepare_imggen(train_df)
 
         # TODO: Remove this once the bug with `validation_data=input_generator` is resolved.
         print("****** Loading Validation Inputs")
-        valid_imgs, valid_labels, _ = self.load_validation(valid_df, bpart)
+        valid_imgs, valid_labels, _ = self.load_validation(valid_df)
 
         # log training time
         start_time = datetime.datetime.now()
         print("****** Starting Training: {:%H-%M-%S}".format(start_time))
 
         # Initiate TensorBoard callback
-        log_path = os.path.join(self.log_path, "log_{}_{}_{}_{:%H-%M-%S}".format(
+        log_path = os.path.join(self.log_path, "log_{}_{}_{}_{:%Y-%m-%d-%H%M}".format(
             bpart, num_pick, self.img_size, start_time
         ))
         util.create_dir(log_path)
         tfboard = keras.callbacks.TensorBoard(log_dir=log_path, write_grads=True)
+
+        # Initiate checkpoint callback
+        # save model after success training
+        util.create_dir(self.model_save_path)
+        model_path = os.path.join(self.model_save_path, "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}.h5".format(
+            bpart, num_pick, self.img_size, start_time
+        ))
+        check_point = keras.callbacks.ModelCheckpoint(
+            model_path,
+            monitor='val_global_kappa',
+            verbose=0,
+            save_best_only=False,
+            save_weights_only=False,
+            mode='auto',
+            period=1
+        )
         history = self.model.fit_generator(
             self.input_generator(train_df, batch_size, input_img_gen),
             steps_per_epoch=math.ceil(train_df.shape[0] / batch_size),
             epochs=epochs,
-            verbose=2,
+            verbose=verbose,
             validation_data=(valid_imgs, valid_labels),
             # validation_data=input_generator(valid_df, batch_size, img_size, grayscale),
             # validation_steps=math.ceil(valid_df.shape[0]/batch_size),
-            callbacks=[tfboard],
+            callbacks=[tfboard, check_point],
             workers=4
         )
+
         print('****** Training time: %s' % (datetime.datetime.now() - start_time))
 
-        print("****** Saving Model")
-        # save model after success training
-        util.create_dir(self.model_save_path)
-        model_path = os.path.join(self.model_save_path, "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}.h5".format(
-            bpart, num_pick, self.img_size, datetime.datetime.now()
-        )
-                                  )
-        keras.models.save_model(
-            self.model,
-            model_path
-        )
+        if reload:
+            self.model = keras.models.load_model(
+                model_path,
+                custom_objects={
+                    "batch_recall": metric.batch_recall,
+                    "global_recall": global_recall,
+                    "global_kappa": global_kappa
+                }
+            )
 
         print("****** Writing Predictions")
         # run prediction on validation set and save result in csv

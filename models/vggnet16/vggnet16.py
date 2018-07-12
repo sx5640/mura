@@ -4,9 +4,9 @@
 import os
 import sys
 
-ROOT_PATH = os.path.abspath(__file__)
-ROOT_PATH = os.path.dirname(ROOT_PATH)
-ROOT_PATH = os.path.dirname(ROOT_PATH)
+CURRENT_PATH = os.path.abspath(__file__)
+CURRENT_PATH = os.path.dirname(CURRENT_PATH)
+ROOT_PATH = os.path.dirname(CURRENT_PATH)
 ROOT_PATH = os.path.dirname(ROOT_PATH)
 sys.path.append(ROOT_PATH)
 
@@ -21,17 +21,20 @@ class VGGNet16(mura_model.MuraModel):
     """
 
     def __init__(self, resize=True, weight=None, grayscale=False, l1=0.0, l2=0.0, **kwargs):
-        super(VGGNet16, self).__init__("vggnet16", resize=resize, grayscale=grayscale)
+        super(VGGNet16, self).__init__(CURRENT_PATH, resize=resize, grayscale=grayscale)
         self.img_size_vgg = 224
         self.img_size = self.img_size_vgg if resize else self.img_size_origin
         self.model = self.build_model(self.img_size, self.color_channel, l1, l2)
 
     @classmethod
     def train_from_cli(cls):
-        args = cls.ARG_PARSER.parse_args()
-        arg_dict = {k: v for k, v in vars(args).items() if v is not None}
-        model = cls(**arg_dict)
-        model.train(**arg_dict)
+        cls.TRAIN_PARSER.add_argument("-l1", "--l1", type=float,
+                                      help="L1 regularization applied to each convolutional layer")
+
+        cls.TRAIN_PARSER.add_argument("-l2", "--l2", type=float,
+                                      help="L2 regularization applied to each convolutional layer")
+
+        super().train_from_cli()
 
     @staticmethod
     def conv_block(tensor, depth, num_layers, filter_size, activation, l1, l2):
