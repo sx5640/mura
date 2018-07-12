@@ -28,7 +28,7 @@ def import_model(model_path):
 
 def prediction_layer_linear_activation(model):
     """
-    Utility method for changing prediction layer's activation to use linear.
+    Utility method for changing prediction layer"s activation to use linear.
     This method will reload the model.
     Args:
         model: model to apply change to.
@@ -38,7 +38,7 @@ def prediction_layer_linear_activation(model):
     """
     # Utility to search for layer index by name.
     # Alternatively we can specify this as -1 since it corresponds to the last layer.
-    layer_idx = vutils.find_layer_idx(model, 'predictions')
+    layer_idx = vutils.find_layer_idx(model, "predictions")
 
     # Swap softmax with linear
     model.layers[layer_idx].activation = keras.activations.linear
@@ -93,7 +93,7 @@ def plt_saliency(model, img, ax, idx):
         model, pred_layer_idx, filter_indices=None, seed_input=img
     )
 
-    ax[idx].imshow(sal, cmap='jet')
+    ax[idx].imshow(sal, cmap="jet")
     ax[idx].set_title("Saliency")
 
 
@@ -118,7 +118,12 @@ def plt_cam(model, img, ax, idx, layer_idx=None):
     hmap = vvis.visualize_cam(
         model, pred_layer_idx, filter_indices=None, seed_input=img
     )
-    ax[idx].imshow(vvis.overlay(hmap, np.stack((img.reshape(img.shape[0:2]),)*3, -1)))
+    if img.shape[2] == 1:
+        input_img = np.stack((img.reshape(img.shape[0:2]),)*3, -1)
+    else:
+        input_img = img
+    print(hmap.shape)
+    ax[idx].imshow(vvis.overlay(hmap, input_img))
     ax[idx].set_title("Heatmap")
 
 
@@ -144,7 +149,10 @@ def plt_attention(model_path, img_path=None, bpart="all", img_size=224, grayscal
     f, ax = plt.subplots(1, 3)
 
     # plot input image
-    ax[0].imshow(img.reshape(img.shape[0:2]), cmap='gray')
+    if grayscale:
+        ax[0].imshow(img.reshape(img.shape[0:2]), cmap="gray")
+    else:
+        ax[0].imshow(img.astype(int))
     ax[0].set_title("Input")
 
     # plot saliency
@@ -199,14 +207,14 @@ def plt_activation(model_path, layer_idx=-1, max_iter=200, **kwargs):
                 str(layer_idx), str(type(model.layers[layer_idx]))
             )
         )
-    plt.axis('off')
+    plt.axis("off")
     plt.imshow(img.reshape(img.shape[0:2]), cmap="gray")
     plt.show()
 
 
 def plot_history(hist):
     """
-    Plot history of the model's loss and evaluation metric during training
+    Plot history of the model"s loss and evaluation metric during training
     Args:
         hist: history returned by model.fit
 
@@ -215,23 +223,31 @@ def plot_history(hist):
     """
     metrics = []
     for key in hist.history.keys():
-        if "loss" not in key:
+        if "loss" not in key and "lr" not in key:
             metrics.append(key)
             plt.plot(hist.history[key])
     plt.title("Metrics")
-    plt.ylabel('accuracy')
-    plt.xlabel('epoch')
-    plt.legend(metrics, loc='lower right')
+    plt.ylabel("accuracy")
+    plt.xlabel("epoch")
+    plt.legend(metrics, loc="lower right")
     plt.show()
 
     # summarize history for loss
-    plt.plot(hist.history['loss'])
-    plt.plot(hist.history['val_loss'])
-    plt.title('model loss')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(['train', 'val'], loc='upper left')
+    plt.plot(hist.history["loss"])
+    plt.plot(hist.history["val_loss"])
+    plt.title("Loss")
+    plt.ylabel("loss")
+    plt.xlabel("epoch")
+    plt.legend(["train", "val"], loc="lower left")
     plt.show()
+
+    if "lr" in hist.history.keys():
+        # summarize history for learning rate
+        plt.plot(hist.history["lr"])
+        plt.title("Learning rate")
+        plt.ylabel("learning rate")
+        plt.xlabel("epoch")
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -239,7 +255,7 @@ if __name__ == "__main__":
     # from console.
     ARG_PARSER = argparse.ArgumentParser("VGGNet model")
     PARENT_PARSER = argparse.ArgumentParser(add_help=False)
-    SUBPARSER = ARG_PARSER.add_subparsers(help='sub-command help')
+    SUBPARSER = ARG_PARSER.add_subparsers(help="sub-command help")
 
     # Shared arguments
     PARENT_PARSER.add_argument(
@@ -279,4 +295,5 @@ if __name__ == "__main__":
 
     # parse argument
     ARGS = ARG_PARSER.parse_args()
-    ARGS.func(**vars(ARGS))
+    ARG_DICT = {k: v for k, v in vars(ARGS).items() if v is not None}
+    ARGS.func(**ARG_DICT)
