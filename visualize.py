@@ -118,7 +118,11 @@ def plt_cam(model, img, ax, idx, layer_idx=None):
     hmap = vvis.visualize_cam(
         model, pred_layer_idx, filter_indices=None, seed_input=img
     )
-    ax[idx].imshow(vvis.overlay(hmap, np.stack((img.reshape(img.shape[0:2]),)*3, -1)))
+    if img.shape[2] == 1:
+        input_img = np.stack((img.reshape(img.shape[0:2]),)*3, -1)
+    else:
+        input_img = img
+    ax[idx].imshow(vvis.overlay(hmap, input_img))
     ax[idx].set_title("Heatmap")
 
 
@@ -144,7 +148,10 @@ def plt_attention(model_path, img_path=None, bpart="all", img_size=224, grayscal
     f, ax = plt.subplots(1, 3)
 
     # plot input image
-    ax[0].imshow(img.reshape(img.shape[0:2]), cmap='gray')
+    if grayscale:
+        ax[0].imshow(img.reshape(img.shape[0:2]), cmap='gray')
+    else:
+        ax[0].imshow(img.astype(int))
     ax[0].set_title("Input")
 
     # plot saliency
@@ -156,7 +163,7 @@ def plt_attention(model_path, img_path=None, bpart="all", img_size=224, grayscal
     plt.tight_layout()
     plt.suptitle("Prediction: {}, Label: {}".format(prediction, label))
     plt.figtext(.5, 0, "Image: {}".format(path))
-    plt.show()
+    ax[0].imshow(img)
 
 
 def plt_activation(model_path, layer_idx=-1, max_iter=200, **kwargs):

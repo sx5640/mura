@@ -233,8 +233,6 @@ class MuraModel(abc.ABC):
 
         """
         imggen_args = dict(
-            featurewise_center=True,
-            featurewise_std_normalization=True,
             rotation_range=30,
             fill_mode="constant",
             cval=0,
@@ -325,9 +323,9 @@ class MuraModel(abc.ABC):
             model_path,
             monitor='val_global_kappa',
             verbose=0,
-            save_best_only=False,
+            save_best_only=True,
             save_weights_only=False,
-            mode='auto',
+            mode='max',
             period=1
         )
         history = self.model.fit_generator(
@@ -347,11 +345,18 @@ class MuraModel(abc.ABC):
         if reload:
             self.model = keras.models.load_model(
                 model_path,
-                custom_objects={
-                    "batch_recall": metric.batch_recall,
-                    "global_recall": global_recall,
-                    "global_kappa": global_kappa
-                }
+                compile=False
+                # custom_objects={
+                #     "batch_recall": metric.batch_recall,
+                #     "BinaryRecall": global_recall,
+                #     "BinaryKappa": global_kappa
+                # }
+            )
+            # TODO: Remove once https://github.com/keras-team/keras/issues/10104 is resolved
+            self.model.compile(
+                loss='binary_crossentropy',
+                optimizer=adam,
+                metrics=[keras.metrics.binary_accuracy, metric.batch_recall, global_recall, global_kappa]
             )
 
         print("****** Writing Predictions")

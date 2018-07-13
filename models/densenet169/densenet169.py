@@ -69,7 +69,7 @@ class DenseNet169(mura_model.MuraModel):
             image in ndarray
         """
         img = super().load_and_process_image(path, imggen)
-        imagenet_utils.preprocess_input(img, mode="tf")
+        imagenet_utils.preprocess_input(img)
         return img
 
 
