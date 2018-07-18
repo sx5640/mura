@@ -90,7 +90,11 @@ def plt_saliency(model, img, ax, idx):
     pred_layer_idx = vutils.find_layer_idx(model, "predictions")
 
     sal = vvis.visualize_saliency(
-        model, pred_layer_idx, filter_indices=None, seed_input=img
+        model,
+        pred_layer_idx,
+        filter_indices=None,
+        seed_input=img,
+        # backprop_modifier='guided'
     )
 
     ax[idx].imshow(sal, cmap="jet")
@@ -122,7 +126,6 @@ def plt_cam(model, img, ax, idx, layer_idx=None):
         input_img = np.stack((img.reshape(img.shape[0:2]),)*3, -1)
     else:
         input_img = img
-    print(hmap.shape)
     ax[idx].imshow(vvis.overlay(hmap, input_img))
     ax[idx].set_title("Heatmap")
 
@@ -208,7 +211,10 @@ def plt_activation(model_path, layer_idx=-1, max_iter=200, **kwargs):
             )
         )
     plt.axis("off")
-    plt.imshow(img.reshape(img.shape[0:2]), cmap="gray")
+    if len(img.shape) == 2 or img.shape[2] == 1:
+        plt.imshow(img.reshape(img.shape[0:2]), cmap="gray")
+    else:
+        plt.imshow(img)
     plt.show()
 
 
@@ -247,6 +253,7 @@ def plot_history(hist):
         plt.title("Learning rate")
         plt.ylabel("learning rate")
         plt.xlabel("epoch")
+        plt.yscale("log")
         plt.show()
 
 

@@ -307,22 +307,22 @@ class MuraModel(abc.ABC):
         ))
         check_point = keras.callbacks.ModelCheckpoint(
             model_path,
-            monitor="val_loss",
+            monitor="val_global_kappa",
             verbose=0,
             save_best_only=True,
             save_weights_only=False,
-            mode="min",
+            mode="max",
             period=1
         )
 
         # Reduce learning rate when a metric has stopped improving.
         lr_reduce = keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss",
+            monitor="val_global_kappa",
             factor=0.1,
-            patience=5,
+            patience=10,
             verbose=1,
-            mode="min",
-            min_delta=0.0001,
+            mode="max",
+            min_delta=1e-4,
             cooldown=0,
             min_lr=0
         )
