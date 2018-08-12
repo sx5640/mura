@@ -1,10 +1,9 @@
 numpy
 pandas
-tensorflow
-keras==2.1.6
+tensorflow-gpu
+keras
 scipy
 matplotlib
-opencv-python
 python-mnist
 keras-vis
 tqdm

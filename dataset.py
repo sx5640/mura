@@ -15,11 +15,11 @@ import math
 import os
 import re
 
-import cv2
 import keras
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy
 
 import util
 
@@ -298,7 +298,7 @@ def resize_img(img, size):
 
     """
 
-    img = cv2.resize(img, (size, size))
+    img = scipy.misc.imresize(img, (size, size))
     if len(img.shape) == 2:
         img = img.reshape((size, size, 1))
     return img

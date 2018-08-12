@@ -16,21 +16,21 @@ from keras.applications import imagenet_utils
 import mura_model
 
 
-class DenseNet169(mura_model.MuraModel):
+class MobileNet(mura_model.MuraModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """
 
-    def __init__(self, resize=True, weight=None, grayscale=False, **kwargs):
-        super(DenseNet169, self).__init__(CURRENT_PATH, resize=resize, grayscale=grayscale)
+    def __init__(self, resize=False, weights=None, grayscale=False, **kwargs):
+        super(MobileNet, self).__init__(CURRENT_PATH, resize=resize, grayscale=grayscale)
         self.img_size_vgg = 224
         self.img_size = self.img_size_vgg if resize else self.img_size_origin
-        self.model = self.build_model(weight)
+        self.model = self.build_model(weights)
 
-    def build_model(self, weight):
+    def build_model(self, weights):
         """
         Laying out the VGGNet model.
-        :param weight: pretrained weight to import.
+        :param weights: pretrained weight to import.
             Notes: if weight == "imagenet", will set image size to 224 and color to 3
         :return: keras model
         """
@@ -39,9 +39,9 @@ class DenseNet169(mura_model.MuraModel):
         inputs = keras.layers.Input(
             (self.img_size, self.img_size, self.color_channel)
         )
-        preload_model = keras.applications.DenseNet169(
+        preload_model = keras.applications.MobileNetV2(
             input_tensor=inputs,
-            weights=weight,
+            weights=weights,
             include_top=False,
             pooling="avg"
         )
@@ -51,10 +51,11 @@ class DenseNet169(mura_model.MuraModel):
             activation="sigmoid",
             name="predictions"
         )(preload_model.output)
+
         model = keras.models.Model(
             inputs=inputs,
             outputs=[output],
-            name="DenseNet169"
+            name="MobileNet"
         )
         return model
 
@@ -74,4 +75,4 @@ class DenseNet169(mura_model.MuraModel):
 
 
 if __name__ == "__main__":
-    DenseNet169.train_from_cli()
+    MobileNet.train_from_cli()

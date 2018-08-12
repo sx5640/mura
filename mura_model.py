@@ -11,6 +11,7 @@ import keras
 import numpy as np
 import pandas as pd
 
+import callback
 import dataset
 import loss
 import metric
@@ -21,10 +22,13 @@ class MuraModel(abc.ABC):
     """
     An abstract Model object that designed to work with MURA dataset.
     """
+
     @classmethod
-    @abc.abstractmethod
-    def train_from_cli(cls, **kwargs):
-        pass
+    def train_from_cli(cls):
+        args = cls.ARG_PARSER.parse_args()
+        arg_dict = {k: v for k, v in vars(args).items() if v is not None}
+        model = cls(**arg_dict)
+        model.train(**arg_dict)
 
     # Define argument parser so that the script can be executed directly
     # from console.
@@ -39,8 +43,8 @@ class MuraModel(abc.ABC):
     TRAIN_PARSER.add_argument("--grayscale", action="store_true",
                               help="load image as grayscale instead of RGB")
 
-    TRAIN_PARSER.add_argument("--reload", action="store_true",
-                              help="reload saved model after training for evaluation")
+    TRAIN_PARSER.add_argument("-r", "--reload",  type=str,
+                              help="reload mode after end of training.")
 
     TRAIN_PARSER.add_argument("-e", "--epochs", type=int,
                               help="number of epochs to run")
@@ -63,19 +67,15 @@ class MuraModel(abc.ABC):
     TRAIN_PARSER.add_argument("-np", "--num_pick", type=int,
                               help="number of images to pick from each patient")
 
+    TRAIN_PARSER.add_argument("-ng", "--num_gpu", type=int,
+                              help="number of GPUs to use")
+
     TRAIN_PARSER.add_argument("-lr", "--learning_rate", type=float,
                               help="learning rate")
 
     # Global Configs
     ROOT_PATH = os.path.abspath(__file__)  # ?/mura_model.py
     ROOT_PATH = os.path.dirname(ROOT_PATH)  # ?/
-
-    @classmethod
-    def train_from_cli(cls):
-        args = cls.ARG_PARSER.parse_args()
-        arg_dict = {k: v for k, v in vars(args).items() if v is not None}
-        model = cls(**arg_dict)
-        model.train(**arg_dict)
 
     def __init__(self, model_root_path, resize=True, grayscale=False, **kwargs):
         self.img_size_origin = 512
@@ -86,10 +86,14 @@ class MuraModel(abc.ABC):
         self.model_root_path = model_root_path                                      # ?/models/{model_name}
         self.weight_path = os.path.join(self.ROOT_PATH, "weights")                  # ?/weights/
         self.model_save_path = os.path.join(self.model_root_path, "saved_models")   # ?/models/{model_name}/saved_models
+        self.model_path = ""
         self.result_path = os.path.join(self.model_root_path, "results")            # ?/models/{model_name}/results
         self.cache_path = os.path.join(self.ROOT_PATH, "cache")                     # ?/cache
         self.log_path = os.path.join(self.model_root_path, "logs")                  # /models/{model_name}/logs
         self.model = None
+        self.result = None
+        self.history = None
+        self.patient = 10
 
     def load_and_process_image(self, path, imggen=None):
         """
@@ -203,25 +207,8 @@ class MuraModel(abc.ABC):
         Yields: List of training images and labels in a batch
 
         """
-        while True:
-            # loop once per epoch
-            for g, batch in df.groupby(np.arange(len(df)) // batch_size):
-                imgs, _, _ = self.load_imgs(batch)
-                yield imgs
-
-    def load_validation(self, valid_df):
-        """
-        Load Validation images into memory.
-        TODO: Remove once the bug with validation_data=generator is resolved.
-        Args:
-            valid_df:
-
-        Returns:
-
-        """
-        img_valid, label_valid, path_valid = self.load_imgs(valid_df)
-
-        return img_valid, label_valid, path_valid
+        for imgs, _ in self.input_generator(df, batch_size):
+            yield imgs
 
     def prepare_imggen(self, df):
         """
@@ -243,6 +230,19 @@ class MuraModel(abc.ABC):
         imggen.fit(np.asarray(samples))
         return imggen
 
+    def calc_steps(self, df, batch_size):
+        """
+        Calculate number of steps needed iterate over the dataframe
+        via generator in each epoch given the batch size.
+        Args:
+            df: dataframe to iterate
+            batch_size: batch size
+
+        Returns: number of steps
+
+        """
+        return math.ceil(df.shape[0] / batch_size)
+
     def train(
             self,
             bpart="all",
@@ -252,7 +252,8 @@ class MuraModel(abc.ABC):
             learning_rate=0.0001,
             decay=0,
             verbose=2,
-            reload=True,
+            reload=None,
+            num_gpu=1,
             **kwargs
     ):
         """
@@ -266,6 +267,7 @@ class MuraModel(abc.ABC):
         :param kwargs: extra parameters
         :param verbose: level of verbosity during training
         :param reload: reload model after training for evaluation
+        :param num_gpu: number of gpus to use
 
         :return:
             A History object. Its History.history attribute is a record of training
@@ -277,20 +279,18 @@ class MuraModel(abc.ABC):
             Path to where the result csv is been saved
         """
 
-
         print("****** Preparing Input")
         train_df, valid_df = self.load_resources(bpart, num_pick)
 
         print("****** Preparing Training Image Generator")
         input_img_gen = self.prepare_imggen(train_df)
 
-        # TODO: Remove this once the bug with `validation_data=input_generator` is resolved.
-        print("****** Loading Validation Inputs")
-        valid_imgs, valid_labels, _ = self.load_validation(valid_df)
-
         # log training time
         start_time = datetime.datetime.now()
         print("****** Starting Training: {:%H-%M-%S}".format(start_time))
+
+        if num_gpu and num_gpu > 1:
+            self.model = keras.utils.multi_gpu_model(self.model, num_gpu)
 
         # Initiate TensorBoard callback
         log_path = os.path.join(self.log_path, "log_{}_{}_{}_{:%Y-%m-%d-%H%M}".format(
@@ -302,16 +302,50 @@ class MuraModel(abc.ABC):
         # Initiate checkpoint callback
         # save model after success training
         util.create_dir(self.model_save_path)
-        model_path = os.path.join(self.model_save_path, "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}.h5".format(
-            bpart, num_pick, self.img_size, start_time
-        ))
-        check_point = keras.callbacks.ModelCheckpoint(
-            model_path,
+        model_path_best_kappa = os.path.join(
+            self.model_save_path,
+            "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}_best_kappa.h5".format(
+                bpart, num_pick, self.img_size, start_time
+            )
+        )
+        check_point_best_kappa = keras.callbacks.ModelCheckpoint(
+            model_path_best_kappa,
             monitor="val_global_kappa",
             verbose=0,
             save_best_only=True,
-            save_weights_only=False,
+            save_weights_only=True,
             mode="max",
+            period=1
+        )
+
+        model_path_least_loss = os.path.join(
+            self.model_save_path,
+            "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}_least_loss.h5".format(
+                bpart, num_pick, self.img_size, start_time
+            )
+        )
+        check_point_least_loss = keras.callbacks.ModelCheckpoint(
+            model_path_least_loss,
+            monitor="val_loss",
+            verbose=0,
+            save_best_only=True,
+            save_weights_only=True,
+            mode="min",
+            period=1
+        )
+
+        model_path_latest = os.path.join(
+            self.model_save_path,
+            "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}_latest.h5".format(
+                bpart, num_pick, self.img_size, start_time
+            )
+        )
+
+        check_point_latest = keras.callbacks.ModelCheckpoint(
+            model_path_latest,
+            verbose=0,
+            save_best_only=False,
+            save_weights_only=True,
             period=1
         )
 
@@ -319,7 +353,7 @@ class MuraModel(abc.ABC):
         lr_reduce = keras.callbacks.ReduceLROnPlateau(
             monitor="val_global_kappa",
             factor=0.1,
-            patience=10,
+            patience=self.patient,
             verbose=1,
             mode="max",
             min_delta=1e-4,
@@ -341,31 +375,62 @@ class MuraModel(abc.ABC):
             optimizer=adam,
             metrics=[keras.metrics.binary_accuracy, metric.batch_recall, global_recall, global_kappa]
         )
+
+        callbacks = [
+                tfboard,
+                check_point_best_kappa,
+                check_point_least_loss,
+                check_point_latest,
+                lr_reduce,
+            ]
+
+        if reload and reload in ["best_kappa", "least_loss"]:
+            if reload == "best_kappa":
+                model_path = model_path_best_kappa
+                monitor = "val_global_kappa"
+                mode = "max"
+            else:
+                model_path = model_path_least_loss
+                monitor = "val_loss"
+                mode = "min"
+
+            self.model_path = model_path
+
+            reload_best = callback.ReloadBest(
+                model_path_least_loss,
+                monitor=monitor,
+                mode=mode,
+                patient=self.patient
+            )
+
+            callbacks.append(reload_best)
+        else:
+            self.model_path = model_path_latest
+
         # Start Training
-        history = self.model.fit_generator(
+        self.history = self.model.fit_generator(
             self.input_generator(train_df, batch_size, input_img_gen),
-            steps_per_epoch=math.ceil(train_df.shape[0] / batch_size),
+            steps_per_epoch=self.calc_steps(train_df, batch_size),
             epochs=epochs,
             verbose=verbose,
-            validation_data=(valid_imgs, valid_labels),
-            # validation_data=input_generator(valid_df, batch_size, img_size, grayscale),
-            # validation_steps=math.ceil(valid_df.shape[0]/batch_size),
-            callbacks=[tfboard, check_point, lr_reduce],
+            validation_data=self.input_generator(valid_df, batch_size),
+            validation_steps=self.calc_steps(valid_df, batch_size),
+            callbacks=callbacks,
             workers=4
         )
 
         print("****** Training time: %s" % (datetime.datetime.now() - start_time))
 
-        if reload:
-            self.model.load_weights(model_path)
+        if reload and reload in ["best_kappa", "least_loss"]:
+            self.model.load_weights(self.model_path)
 
         print("****** Writing Predictions")
         # run prediction on validation set and save result in csv
-        result_path = self.write_prediction(valid_df, batch_size)
+        self.result = self.write_prediction(valid_df, batch_size)
 
-        return history, model_path, result_path
+        return self.history, self.model_path, self.result
 
-    def write_prediction(self,  valid_df, batch_size,):
+    def write_prediction(self, valid_df, batch_size):
         """
         Run prediction using given model on a list of images,
         and write the result to a csv file.
@@ -388,4 +453,4 @@ class MuraModel(abc.ABC):
                                    )
         valid_df.to_csv(result_path)
 
-        return result_path
+        return valid_df
