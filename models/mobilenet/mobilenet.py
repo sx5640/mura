@@ -40,10 +40,10 @@ class MobileNet(mura_model.MuraModel):
             (self.img_size, self.img_size, self.color_channel)
         )
 
-        custom_weights = weights and weights != "imagenet"
-        preload_weights = weights
-        if custom_weights:
-            preload_weights = None
+        custom_weights = weights and os.path.isfile(weights)
+        preload_weights = None
+        if not custom_weights:
+            preload_weights = weights
 
         preload_model = keras.applications.MobileNet(
             input_tensor=inputs,
