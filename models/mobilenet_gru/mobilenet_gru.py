@@ -10,6 +10,7 @@ ROOT_PATH = os.path.dirname(CURRENT_PATH)
 ROOT_PATH = os.path.dirname(ROOT_PATH)
 sys.path.append(ROOT_PATH)
 
+import datetime
 import math
 
 import keras
@@ -17,6 +18,7 @@ from keras.applications import imagenet_utils
 import numpy as np
 
 import mura_model
+import util
 
 
 class MobileNetGRU(mura_model.MuraModel):
@@ -77,7 +79,7 @@ class MobileNetGRU(mura_model.MuraModel):
         )
 
         if custom_weights:
-            model.load_weights(weights, by_name=True)
+            model.load_weights(weights, by_name=True, skip_mismatch=True)
 
         return model
 
@@ -95,14 +97,14 @@ class MobileNetGRU(mura_model.MuraModel):
         imagenet_utils.preprocess_input(img)
         return img
 
-    def input_generator(self, df, batch_size, imggen=None):
+    def input_generator(self, df, batch_size, is_train_data):
         """
         Generator that yields a batch of images with their labels
         Args:
+            is_train_data: if the generator is used to generate training data.
+                if True, will shuffle df each epoch and add image processing.
             df: Dataframe that contains all the images need to be loaded
             batch_size: Maximum number of images in each batch
-            imggen: ImageDataGenerator used to apply perturbation. If None,
-                then no perturbation is applied.
 
         Yields: List of training images and labels in a batch
 
@@ -111,9 +113,16 @@ class MobileNetGRU(mura_model.MuraModel):
             "path": lambda x: x.tolist(),
             "label": np.prod}
         )
+
+        imggen = None
+        if is_train_data:
+            print("****** Preparing Training Image Generator")
+            imggen = self.prepare_imggen(df)
+
         while True:
             # shuffle the training set
-            df = df.sample(frac=1).reset_index(drop=True)
+            if is_train_data:
+                df = df.sample(frac=1).reset_index(drop=True)
             for g, batch in df.groupby(np.arange(len(df)) // batch_size):
                 # reset the index so that the index is based on position inside batch
                 batch.reset_index(inplace=True)
@@ -148,6 +157,33 @@ class MobileNetGRU(mura_model.MuraModel):
 
         """
         return math.ceil(len(df["study"].unique()) / batch_size)
+
+    def write_prediction(self, valid_df, batch_size):
+        """
+        Run prediction using given model on a list of images,
+        and write the result to a csv file.
+        :param batch_size: number of inputs in each batch.
+        :param valid_df: validation dataset table
+        :return:
+            path to result result csv
+        """
+        predictions = self.model.predict_generator(
+            self.img_generator(valid_df, batch_size, False),
+            steps=math.ceil(valid_df.shape[0] / batch_size)
+        )
+
+        studies = valid_df["study"].unique()
+        util.create_dir(self.result_path)
+        for i in range(len(studies)):
+            valid_df.loc[valid_df["study"] == studies[i], "prediction"] = predictions[i]
+
+        result_path = os.path.join(self.result_path, "{}_{:%Y-%m-%d-%H%M}.csv".format(
+            self.__class__.__name__, datetime.datetime.now()
+        )
+                                   )
+        valid_df.to_csv(result_path)
+
+        return valid_df
 
 
 if __name__ == "__main__":

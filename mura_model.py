@@ -177,37 +177,45 @@ class MuraModel(abc.ABC):
 
         return train_df, valid_df
 
-    def input_generator(self, df, batch_size, imggen=None):
+    def input_generator(self, df, batch_size, is_train_data):
         """
         Generator that yields a batch of images with their labels
         Args:
+            is_train_data: if the generator is used to generate training data.
+                if True, will shuffle df each epoch and add image processing.
             df: Dataframe that contains all the images need to be loaded
             batch_size: Maximum number of images in each batch
-            imggen: ImageDataGenerator used to apply perturbation. If None,
-                then no perturbation is applied.
 
         Yields: List of training images and labels in a batch
 
         """
+        imggen = None
+        if is_train_data:
+            print("****** Preparing Training Image Generator")
+            imggen = self.prepare_imggen(df)
         while True:
             # loop once per epoch
-            df = df.sample(frac=1).reset_index(drop=True)
+            if is_train_data:
+                # shuffle dataframe
+                df = df.sample(frac=1).reset_index(drop=True)
             for g, batch in df.groupby(np.arange(len(df)) // batch_size):
                 imgs, labels, _ = self.load_imgs(batch, imggen)
 
                 yield imgs, labels
 
-    def img_generator(self, df, batch_size):
+    def img_generator(self, df, batch_size, is_train_data=False):
         """
         Generator that yields a batch of  images
         Args:
+            is_train_data: if the generator is used to generate training data.
+                if True, will shuffle df each epoch and add image processing.
             df: Dataframe that contains all the images need to be loaded
             batch_size: Maximum number of images in each batch
 
         Yields: List of training images and labels in a batch
 
         """
-        for imgs, _ in self.input_generator(df, batch_size):
+        for imgs, _ in self.input_generator(df, batch_size, is_train_data):
             yield imgs
 
     def prepare_imggen(self, df):
@@ -282,9 +290,6 @@ class MuraModel(abc.ABC):
         print("****** Preparing Input")
         train_df, valid_df = self.load_resources(bpart, num_pick)
 
-        print("****** Preparing Training Image Generator")
-        input_img_gen = self.prepare_imggen(train_df)
-
         # log training time
         start_time = datetime.datetime.now()
         print("****** Starting Training: {:%H-%M-%S}".format(start_time))
@@ -304,8 +309,8 @@ class MuraModel(abc.ABC):
         util.create_dir(self.model_save_path)
         model_path_best_kappa = os.path.join(
             self.model_save_path,
-            "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}_best_kappa.h5".format(
-                bpart, num_pick, self.img_size, start_time
+            "{}_{}_{}_{}_{:%Y-%m-%d-%H%M}_best_kappa.h5".format(
+                self.__class__.__name__, bpart, num_pick, self.img_size, start_time
             )
         )
         check_point_best_kappa = keras.callbacks.ModelCheckpoint(
@@ -320,8 +325,8 @@ class MuraModel(abc.ABC):
 
         model_path_least_loss = os.path.join(
             self.model_save_path,
-            "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}_least_loss.h5".format(
-                bpart, num_pick, self.img_size, start_time
+            "{}_{}_{}_{}_{:%Y-%m-%d-%H%M}_least_loss.h5".format(
+                self.__class__.__name__, bpart, num_pick, self.img_size, start_time
             )
         )
         check_point_least_loss = keras.callbacks.ModelCheckpoint(
@@ -336,8 +341,8 @@ class MuraModel(abc.ABC):
 
         model_path_latest = os.path.join(
             self.model_save_path,
-            "vgg_{}_{}_{}_{:%Y-%m-%d-%H%M}_latest.h5".format(
-                bpart, num_pick, self.img_size, start_time
+            "{}_{}_{}_{}_{:%Y-%m-%d-%H%M}_latest.h5".format(
+                self.__class__.__name__, bpart, num_pick, self.img_size, start_time
             )
         )
 
@@ -409,11 +414,11 @@ class MuraModel(abc.ABC):
 
         # Start Training
         self.history = self.model.fit_generator(
-            self.input_generator(train_df, batch_size, input_img_gen),
+            self.input_generator(train_df, batch_size, True),
             steps_per_epoch=self.calc_steps(train_df, batch_size),
             epochs=epochs,
             verbose=verbose,
-            validation_data=self.input_generator(valid_df, batch_size),
+            validation_data=self.input_generator(valid_df, batch_size, False),
             validation_steps=self.calc_steps(valid_df, batch_size),
             callbacks=callbacks,
             workers=4
@@ -440,15 +445,15 @@ class MuraModel(abc.ABC):
             path to result result csv
         """
         predictions = self.model.predict_generator(
-            self.img_generator(valid_df, batch_size),
+            self.img_generator(valid_df, batch_size, False),
             steps=math.ceil(valid_df.shape[0] / batch_size)
         )
         util.create_dir(self.result_path)
         for i in range(len(predictions)):
             valid_df.at[i, "prediction"] = predictions[i]
 
-        result_path = os.path.join(self.result_path, "vgg_{:%Y-%m-%d-%H%M}.csv".format(
-            datetime.datetime.now()
+        result_path = os.path.join(self.result_path, "{}_{:%Y-%m-%d-%H%M}.csv".format(
+            self.__class__.__name__, datetime.datetime.now()
         )
                                    )
         valid_df.to_csv(result_path)

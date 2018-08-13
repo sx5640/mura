@@ -39,9 +39,15 @@ class MobileNet(mura_model.MuraModel):
         inputs = keras.layers.Input(
             (self.img_size, self.img_size, self.color_channel)
         )
-        preload_model = keras.applications.MobileNetV2(
+
+        custom_weights = weights and weights != "imagenet"
+        preload_weights = weights
+        if custom_weights:
+            preload_weights = None
+
+        preload_model = keras.applications.MobileNet(
             input_tensor=inputs,
-            weights=weights,
+            weights=preload_weights,
             include_top=False,
             pooling="avg"
         )
@@ -57,6 +63,10 @@ class MobileNet(mura_model.MuraModel):
             outputs=[output],
             name="MobileNet"
         )
+
+        if custom_weights:
+            model.load_weights(weights, by_name=True)
+
         return model
 
     def load_and_process_image(self, path, imggen=None):
