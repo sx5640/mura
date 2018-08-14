@@ -122,7 +122,8 @@ class MobileNetGRU(mura_model.MuraModel):
         while True:
             # shuffle the training set
             if is_train_data:
-                df = df.sample(frac=1).reset_index(drop=True)
+                df = df.sample(frac=1)
+            df.reset_index(drop=True)
             for g, batch in df.groupby(np.arange(len(df)) // batch_size):
                 # reset the index so that the index is based on position inside batch
                 batch.reset_index(inplace=True)
@@ -169,18 +170,21 @@ class MobileNetGRU(mura_model.MuraModel):
         """
         predictions = self.model.predict_generator(
             self.img_generator(valid_df, batch_size, False),
-            steps=math.ceil(valid_df.shape[0] / batch_size)
+            steps=self.calc_steps(valid_df, batch_size)
         )
 
-        studies = valid_df["study"].unique()
+        df = valid_df.groupby("study").agg({
+            "path": lambda x: x.tolist(),
+            "label": np.prod}
+        ).reset_index()
+
         util.create_dir(self.result_path)
-        for i in range(len(studies)):
-            valid_df.loc[valid_df["study"] == studies[i], "prediction"] = predictions[i]
+        for i in range(len(df)):
+            valid_df.loc[valid_df["study"] == df.iloc[i]["study"], "prediction"] = predictions[i]
 
         result_path = os.path.join(self.result_path, "{}_{:%Y-%m-%d-%H%M}.csv".format(
             self.__class__.__name__, datetime.datetime.now()
-        )
-                                   )
+        ))
         valid_df.to_csv(result_path)
 
         return valid_df
