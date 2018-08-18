@@ -20,10 +20,10 @@ class VGGNet16(mura_model.MuraModel):
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """
 
-    def __init__(self, resize=True, weight=None, grayscale=False, l1=0.0, l2=0.0, **kwargs):
-        super(VGGNet16, self).__init__(CURRENT_PATH, resize=resize, grayscale=grayscale)
+    def __init__(self, img_size=224, weight=None, grayscale=False, l1=0.0, l2=0.0, **kwargs):
+        super(VGGNet16, self).__init__(CURRENT_PATH, img_size=img_size, grayscale=grayscale)
         self.img_size_vgg = 224
-        self.img_size = self.img_size_vgg if resize else self.img_size_origin
+        self.img_size = img_size
         self.model = self.build_model(self.img_size, self.color_channel, l1, l2)
 
     @classmethod

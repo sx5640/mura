@@ -26,10 +26,10 @@ class MobileNetGRU(mura_model.MuraModel):
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """
 
-    def __init__(self, resize=False, weights=None, grayscale=False, lock_bottom=False, **kwargs):
-        super(MobileNetGRU, self).__init__(CURRENT_PATH, resize=resize, grayscale=grayscale)
+    def __init__(self, img_size=224, weights=None, grayscale=False, lock_bottom=False, **kwargs):
+        super(MobileNetGRU, self).__init__(CURRENT_PATH, img_size=img_size, grayscale=grayscale)
         self.img_size_vgg = 224
-        self.img_size = self.img_size_vgg if resize else self.img_size_origin
+        self.img_size = img_size
         self.model = self.build_model(weights, lock_bottom)
 
     def build_model(self, weights, lock_bottom):

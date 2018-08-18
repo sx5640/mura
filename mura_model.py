@@ -37,9 +37,6 @@ class MuraModel(abc.ABC):
     # Arguments for training
     TRAIN_PARSER = SUBPARSER.add_parser("train")
     TRAIN_PARSER.set_defaults(func=train_from_cli)
-    TRAIN_PARSER.add_argument("--resize", action="store_true",
-                              help="resize image to original ImageNet size")
-
     TRAIN_PARSER.add_argument("--grayscale", action="store_true",
                               help="load image as grayscale instead of RGB")
 
@@ -61,6 +58,9 @@ class MuraModel(abc.ABC):
     TRAIN_PARSER.add_argument("-v", "--verbose", type=int,
                               help="verbosity during training")
 
+    TRAIN_PARSER.add_argument("-is", "--img_size", type=int,
+                              help="size of the input image")
+
     TRAIN_PARSER.add_argument("-bp", "--bpart", type=str,
                               help="body part to use for training and prediction")
 
@@ -77,10 +77,8 @@ class MuraModel(abc.ABC):
     ROOT_PATH = os.path.abspath(__file__)  # ?/mura_model.py
     ROOT_PATH = os.path.dirname(ROOT_PATH)  # ?/
 
-    def __init__(self, model_root_path, resize=True, grayscale=False, **kwargs):
-        self.img_size_origin = 512
-        self.img_size = None
-        self.img_resized = resize
+    def __init__(self, model_root_path, img_size=224, grayscale=False, **kwargs):
+        self.img_size = img_size
         self.img_grayscale = grayscale
         self.color_channel = 1 if grayscale else 3
         self.model_root_path = model_root_path                                      # ?/models/{model_name}
@@ -106,7 +104,8 @@ class MuraModel(abc.ABC):
             image in ndarray
         """
         img = dataset.load_image(path, self.img_grayscale)
-        if self.img_resized:
+        actual_img_size = img.shape[0]
+        if actual_img_size != self.img_size:
             img = dataset.resize_img(img, self.img_size)
         if imggen:
             img = imggen.random_transform(img)
