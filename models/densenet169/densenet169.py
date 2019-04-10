@@ -13,10 +13,10 @@ sys.path.append(ROOT_PATH)
 import keras
 from keras.applications import imagenet_utils
 
-import mura_model
+import keras_model
 
 
-class DenseNet169(mura_model.MuraModel):
+class DenseNet169(keras_model.KerasModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """

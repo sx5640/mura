@@ -12,10 +12,10 @@ sys.path.append(ROOT_PATH)
 
 import keras
 
-import mura_model
+import keras_model
 
 
-class VGGNet16(mura_model.MuraModel):
+class VGGNet16(keras_model.KerasModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """

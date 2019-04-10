@@ -13,10 +13,10 @@ sys.path.append(ROOT_PATH)
 import keras
 from keras.applications import imagenet_utils
 
-import mura_model
+import keras_model
 
 
-class MobileNet(mura_model.MuraModel):
+class MobileNet(keras_model.KerasModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """

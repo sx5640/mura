@@ -1,5 +1,5 @@
 """
-An abstract Model object that designed to work with MURA dataset.
+An abstract Model object that designed to work with MURA dataset with Keras backend.
 """
 import abc
 import argparse
@@ -18,9 +18,9 @@ import metric
 import util
 
 
-class MuraModel(abc.ABC):
+class KerasModel(abc.ABC):
     """
-    An abstract Model object that designed to work with MURA dataset.
+    An abstract Model object that designed to work with MURA dataset with keras backend.
     """
 
     @classmethod
@@ -74,7 +74,7 @@ class MuraModel(abc.ABC):
                               help="learning rate")
 
     # Global Configs
-    ROOT_PATH = os.path.abspath(__file__)  # ?/mura_model.py
+    ROOT_PATH = os.path.abspath(__file__)  # ?/keras_model.py
     ROOT_PATH = os.path.dirname(ROOT_PATH)  # ?/
 
     def __init__(self, model_root_path, img_size=224, grayscale=False, **kwargs):

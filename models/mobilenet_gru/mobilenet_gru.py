@@ -17,11 +17,11 @@ import keras
 from keras.applications import imagenet_utils
 import numpy as np
 
-import mura_model
+import keras_model
 import util
 
 
-class MobileNetGRU(mura_model.MuraModel):
+class MobileNetGRU(keras_model.KerasModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """
