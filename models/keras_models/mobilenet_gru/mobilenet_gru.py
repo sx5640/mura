@@ -4,6 +4,8 @@ A model that replace the top of DenseNet169 with GRU units
 import os
 import sys
 
+import util
+
 CURRENT_PATH = os.path.abspath(__file__)
 CURRENT_PATH = os.path.dirname(CURRENT_PATH)
 ROOT_PATH = os.path.dirname(CURRENT_PATH)
@@ -17,11 +19,10 @@ import keras
 from keras.applications import imagenet_utils
 import numpy as np
 
-import keras_model
-import util
+from models.keras_models import abs_model, util
 
 
-class MobileNetGRU(keras_model.KerasModel):
+class MobileNetGRU(abs_model.KerasModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """

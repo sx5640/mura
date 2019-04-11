@@ -13,24 +13,24 @@ sys.path.append(ROOT_PATH)
 import keras
 from keras.applications import imagenet_utils
 
-import keras_model
+from models.keras_models import abs_model
 
 
-class DenseNet169(keras_model.KerasModel):
+class MobileNet(abs_model.KerasModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """
 
-    def __init__(self, img_size=224, weight=None, grayscale=False, **kwargs):
-        super(DenseNet169, self).__init__(CURRENT_PATH, img_size=img_size, grayscale=grayscale)
+    def __init__(self, img_size=224, weights=None, grayscale=False, **kwargs):
+        super(MobileNet, self).__init__(CURRENT_PATH, img_size=img_size, grayscale=grayscale)
         self.img_size_vgg = 224
         self.img_size = img_size
-        self.model = self.build_model(weight)
+        self.model = self.build_model(weights)
 
-    def build_model(self, weight):
+    def build_model(self, weights):
         """
         Laying out the VGGNet model.
-        :param weight: pretrained weight to import.
+        :param weights: pretrained weight to import.
             Notes: if weight == "imagenet", will set image size to 224 and color to 3
         :return: keras model
         """
@@ -39,9 +39,15 @@ class DenseNet169(keras_model.KerasModel):
         inputs = keras.layers.Input(
             (self.img_size, self.img_size, self.color_channel)
         )
-        preload_model = keras.applications.DenseNet169(
+
+        custom_weights = weights and os.path.isfile(weights)
+        preload_weights = None
+        if not custom_weights:
+            preload_weights = weights
+
+        preload_model = keras.applications.MobileNet(
             input_tensor=inputs,
-            weights=weight,
+            weights=preload_weights,
             include_top=False,
             pooling="avg"
         )
@@ -51,11 +57,16 @@ class DenseNet169(keras_model.KerasModel):
             activation="sigmoid",
             name="predictions"
         )(preload_model.output)
+
         model = keras.models.Model(
             inputs=inputs,
             outputs=[output],
-            name="DenseNet169"
+            name="MobileNet"
         )
+
+        if custom_weights:
+            model.load_weights(weights, by_name=True)
+
         return model
 
     def load_and_process_image(self, path, imggen=None):
@@ -74,4 +85,4 @@ class DenseNet169(keras_model.KerasModel):
 
 
 if __name__ == "__main__":
-    DenseNet169.train_from_cli()
+    MobileNet.train_from_cli()

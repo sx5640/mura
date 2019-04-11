@@ -4,7 +4,7 @@ Visualization of a given model
 import argparse
 
 import dataset
-import util
+from models.keras_models import util
 
 import keras
 import matplotlib.pyplot as plt
