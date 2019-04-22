@@ -75,7 +75,9 @@ class KerasModel(abc.ABC):
                               help="learning rate")
 
     # Global Configs
-    ROOT_PATH = os.path.abspath(os.path.join(os.pardir, os.pardir, os.pardir))  # Root directory of the repo
+    # Root directory of the repo
+    ROOT_PATH = os.path.abspath(__file__)  # ?/models/tf_models/tf_model.py
+    ROOT_PATH = os.path.abspath(os.path.join(ROOT_PATH, os.pardir, os.pardir, os.pardir))  # ?/
 
     def __init__(self, model_root_path, img_size=224, grayscale=False, **kwargs):
         self.img_size = img_size
