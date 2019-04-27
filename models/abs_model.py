@@ -135,25 +135,39 @@ class MuraModel(abc.ABC):
 
         return np.asarray(imgs), np.asarray(labels), np.asarray(paths)
 
-    def load_resources(self, bpart, num_pick):
+    def load_dataset_as_df(self, bpart, num_pick):
         """
-        Utility method that load all the resources needed for training.
-        Will use csv/pickle/recreated images as cache to avoid recomputation.
-        Args:
-            bpart: Body part to pick
-            num_pick: Number of images to pick from each study in training set
+        Utility method that load training and validation dataset as dataframes.
+        Will filter based on `bpart` to pick ane `num_pick` per study.
 
-        Returns: train_df, valid_df, img_valid, label_valid, path_valid, flow_dir
+        Both dataframes have the following columns:
+            ['level_0', 'index', 'path', 'patient', 'label', 'body_part', 'study']
+
+        If a study does not have enough images to fill `num_pick`, will append empty        rows where `path` is `None` until `num_pick` is fulfilled.
+
+        Will use csv/pickle/recreated images as cache to avoid recomputation.
+
+        Args:
+            bpart: str
+                Body part to pick
+            num_pick: int
+                Number of images to pick from each study for both datasets
+
+        Returns:
+            pandas.Dataframe:
+                Training set in Dataframe
+            pandas.Dataframe:
+                Validation set in Datframe
 
         """
         train_table_path = os.path.join(
             self.cache_path,
-            "training_table_{}_{}.csv".format(bpart, num_pick)
+            f"training_table_{bpart}_{num_pick}.csv"
         )
 
         valid_table_path = os.path.join(
             self.cache_path,
-            "valid_table_{}.csv".format(bpart)
+            f"valid_table_{bpart}.csv"
         )
 
         # Load datasets from csvs. If not exist, recreate from dataset.py and save to csvs
