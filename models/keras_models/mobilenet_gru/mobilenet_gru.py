@@ -19,10 +19,11 @@ import keras
 from keras.applications import imagenet_utils
 import numpy as np
 
-from models.keras_models import abs_model, util
+from models.keras_models import util
+from models import abs_model
 
 
-class MobileNetGRU(abs_model.KerasModel):
+class MobileNetGRU(abs_model.MuraModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """

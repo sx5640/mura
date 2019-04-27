@@ -13,10 +13,10 @@ sys.path.append(ROOT_PATH)
 import keras
 from keras.applications import imagenet_utils
 
-from models.keras_models import abs_model
+from models import abs_model
 
 
-class DenseNet169(abs_model.KerasModel):
+class DenseNet169(abs_model.MuraModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """

@@ -2,14 +2,17 @@
 An abstract Model object that designed to work with MURA dataset with Tensorflow backend.
 """
 import os
+import sys
 
 import pandas as pd
 
-import dataset
-from models.keras_models import util
+ROOT_PATH = os.path.abspath(__file__)  # ?/models/tf_models/tf_model.py
+ROOT_PATH = os.path.abspath(os.path.join(ROOT_PATH, os.pardir, os.pardir, os.pardir))  # ?/
+sys.path.append(ROOT_PATH)
 
-ROOT_PATH = os.path.abspath(__file__)  # ?/abs_model.py
-ROOT_PATH = os.path.dirname(ROOT_PATH)  # ?/
+import dataset
+import util
+
 
 
 def load_resources(bpart, num_pick):
@@ -44,7 +47,6 @@ def load_resources(bpart, num_pick):
         util.create_dir(cache_path)
 
         train_df, valid_df = dataset.preprocess()
-
         if bpart != "all":
             train_df = dataset.pick_bpart(train_df, bpart)
             valid_df = dataset.pick_bpart(valid_df, bpart)

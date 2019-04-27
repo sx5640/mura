@@ -92,7 +92,7 @@ def complete_path(data, column):
     """
     data[column] = np.where(
         data[column].str.startswith("MURA-v" + DATA_VIR),
-        data[column].str.replace("MURA-v" + DATA_VIR, DATA_DIR),
+        data[column].str.replace("MURA-v" + DATA_VIR, DATA_DIR, regex=False),
         data[column]
     )
 
@@ -197,18 +197,19 @@ def pick_n_per_patient(df, num):
     """
     if num == 0:
         return df
-    min_count = df.groupby("study")["path"].count().min()
 
-    if num > min_count:
-        raise ValueError("num is greater than minimum count of images per patient: {}".format(
-            min_count
-        ))
+    trimmed_df = pd.DataFrame()
 
-    result = pd.DataFrame()
     for study in df["study"].unique():
-        result = result.append(df[df["study"] == study][:num])
+        match = df[df["study"] == study]
+        short = num - len(match)
+        if short > 0:
+            for _ in range(short):
+                match.append(pd.Series([np.nan]), ignore_index=True)
 
-    return result.reset_index()
+        trimmed_df = trimmed_df.append(match[:num])
+
+    return trimmed_df.reset_index()
 
 
 def zero_pad(img):
@@ -248,6 +249,8 @@ def load_image(img_path, is_grayscale=False):
     Returns: image as ndarray
 
     """
+    if not img_path:
+        return np.zeros((IMG_SIZE, IMG_SIZE, 1 if is_grayscale else 3))
     im = keras.preprocessing.image.load_img(img_path, grayscale=is_grayscale)
     im = keras.preprocessing.image.img_to_array(im)     # converts image to numpy array
     return zero_pad(im)

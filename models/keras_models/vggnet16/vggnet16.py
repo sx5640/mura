@@ -12,10 +12,10 @@ sys.path.append(ROOT_PATH)
 
 import keras
 
-from models.keras_models import abs_model
+from models import abs_model
 
 
-class VGGNet16(abs_model.KerasModel):
+class VGGNet16(abs_model.MuraModel):
     """
     A 16 layers VGGNet Model object that designed to work with MURA dataset.
     """

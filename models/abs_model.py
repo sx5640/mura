@@ -19,7 +19,7 @@ import util
 from models.keras_models import util
 
 
-class KerasModel(abc.ABC):
+class MuraModel(abc.ABC):
     """
     An abstract Model object that designed to work with MURA dataset with keras backend.
     """
@@ -33,7 +33,7 @@ class KerasModel(abc.ABC):
 
     # Define argument parser so that the script can be executed directly
     # from console.
-    ARG_PARSER = argparse.ArgumentParser("VGGNet model")
+    ARG_PARSER = argparse.ArgumentParser("Mura model")
     SUBPARSER = ARG_PARSER.add_subparsers(help="sub-command help")
     # Arguments for training
     TRAIN_PARSER = SUBPARSER.add_parser("train")
@@ -76,7 +76,7 @@ class KerasModel(abc.ABC):
 
     # Global Configs
     # Root directory of the repo
-    ROOT_PATH = os.path.abspath(__file__)  # ?/models/tf_models/tf_model.py
+    ROOT_PATH = os.path.abspath(__file__)  # ?/models/tf_models/abs_model.py
     ROOT_PATH = os.path.abspath(os.path.join(ROOT_PATH, os.pardir, os.pardir, os.pardir))  # ?/
 
     def __init__(self, model_root_path, img_size=224, grayscale=False, **kwargs):
